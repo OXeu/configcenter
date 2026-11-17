@@ -9,6 +9,7 @@ export function createForm(page: import('./page.ts').PageContext) {
     open: false,
     danger: false,
     title: '',
+    description: '',
     busy: false,
     error: '',
     token: '',
@@ -34,6 +35,7 @@ export function createForm(page: import('./page.ts').PageContext) {
       action: () => Promise<void>,
     ) {
       this.danger = false
+      this.description = ''
       this.title = title
       this.fields = fields
       this.values = { ...values }

@@ -137,7 +137,7 @@
   "scope.projects:write": "Create / edit projects",
   "scope.projects:delete": "Delete projects",
   "scope.environments:read": "Read environments",
-  "scope.environments:write": "Create environments",
+  "scope.environments:write": "Create / edit environments",
   "scope.environments:delete": "Delete environments",
   "scope.config:read": "Read configuration (masked secrets)",
   "scope.config:read-secrets": "Read secret plaintext",
@@ -160,5 +160,11 @@
   "oauth.resource": "Resource",
   "oauth.redirect": "Client callback address",
   "oauth.allow": "Authorize",
-  "oauth.deny": "Deny"
+  "oauth.deny": "Deny",
+  "projects.environments": "Environments",
+  "environments.rename": "Rename",
+  "environments.renameWarning": "Changing the slug breaks existing business connections. Update clients to use the new slug before reconnecting.",
+  "environments.deleteWarning": "This permanently deletes the environment, all its configuration and proposals, and breaks existing business connections.",
+  "environments.systemProtected": "The system production environment is required for settings and cannot be renamed or deleted.",
+  "environments.lastProtected": "Keep at least one environment in the project."
 }

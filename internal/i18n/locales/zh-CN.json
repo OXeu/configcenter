@@ -137,7 +137,7 @@
   "scope.projects:write": "创建或编辑项目",
   "scope.projects:delete": "删除项目",
   "scope.environments:read": "读取环境",
-  "scope.environments:write": "创建环境",
+  "scope.environments:write": "创建 / 编辑环境",
   "scope.environments:delete": "删除环境",
   "scope.config:read": "读取配置（密钥掩码）",
   "scope.config:read-secrets": "读取密钥明文",
@@ -160,5 +160,11 @@
   "oauth.resource": "访问资源",
   "oauth.redirect": "客户端回调地址",
   "oauth.allow": "允许授权",
-  "oauth.deny": "拒绝授权"
+  "oauth.deny": "拒绝授权",
+  "projects.environments": "环境管理",
+  "environments.rename": "改名",
+  "environments.renameWarning": "修改环境标识会破坏已有业务连接。请同步修改客户端使用的环境标识后重新连接。",
+  "environments.deleteWarning": "此操作将永久删除环境及其全部配置和提案，并破坏已有业务连接。",
+  "environments.systemProtected": "系统的 production 环境用于存储系统设置，不能修改标识或删除。",
+  "environments.lastProtected": "项目至少需要保留一个环境。"
 }

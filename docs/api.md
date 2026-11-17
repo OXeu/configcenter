@@ -72,7 +72,7 @@ MCP 的 `list_config` 和 `list_values` 接受 `keys` 字符串数组，`set_con
 | `projects:write`      | 修改项目名称和描述；范围为 `*` 时可创建项目                  |
 | `projects:delete`     | 删除项目及其环境、配置和提案                                 |
 | `environments:read`   | 读取环境列表                                                 |
-| `environments:write`  | 创建环境                                                     |
+| `environments:write`  | 创建 / 编辑环境                                              |
 | `environments:delete` | 删除环境及其配置                                             |
 | `config:read`         | 读取配置列表或单个配置项，密钥返回掩码                       |
 | `config:read-secrets` | 通过专用授权接口读取配置明文                                 |
@@ -143,6 +143,7 @@ curl --fail-with-body --silent --show-error --get \
 | DELETE | `/api/v1/projects/:project`                              | `projects:delete`                                                                                             |
 | GET    | `/api/v1/projects/:project/environments`                 | `environments:read`                                                                                           |
 | POST   | `/api/v1/projects/:project/environments`                 | `environments:write`；`slug`、`name`                                                                          |
+| PATCH  | `/api/v1/projects/:project/environments/:env`            | `environments:write`；`slug`、`name` 必填；修改标识会使旧连接失效                                             |
 | DELETE | `/api/v1/projects/:project/environments/:env`            | `environments:delete`                                                                                         |
 | GET    | `/api/v1/projects/:project/environments/:env/items`      | `config:read`；可选 `?prefix=`                                                                                |
 | GET    | `/api/v1/projects/:project/environments/:env/items/:key` | `config:read`；读取单个配置项                                                                                 |
@@ -212,3 +213,5 @@ API Key 查询 scope 选项时，`projects` 只包含具有 `projects:read` 的�
 不能删除调用者自己的账号，也不能将自己从管理员降级。Key 调用以 Key 的创建者作为操作账号。设置读取响应为 `{"settings":[{"key":"allow_registration","value":false}]}`，保存成功返回 HTTP 204。
 
 以上全部 API 都可通过统一 [MCP 接口](/docs/mcp) 调用，权限和业务行为保持一致。
+
+环境管理支持修改显示名称和连接标识。修改标识后，旧标识立即失效，配置及提案仍归属原环境。删除环境会同时删除其配置和提案；项目至少保留一个环境，系统项目的 `production` 环境不能修改标识或删除。浏览器中的改名和删除均需通过「更多」菜单确认。

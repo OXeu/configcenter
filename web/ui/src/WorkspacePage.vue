@@ -43,10 +43,14 @@ const canCreate = computed(
 const showViewSwitch = computed(() => data.isAdmin && data.page === 'projects')
 const viewLabel = computed(() => msg(state.view === 'all' ? 'projects.mine' : 'projects.all'))
 const reviewing = computed(() => data.page === 'project' && state.tab === 'proposals')
+const managingEnvironments = computed(() => data.page === 'project' && state.tab === 'environments')
+const canEditRow = computed(() => !reviewing.value && !managingEnvironments.value)
+const tabs = ['items', 'environments', 'keys', 'proposals']
 const columns = computed(() => {
   if (data.page === 'settings') return ['key', 'value']
   if (data.page === 'projects') return ['name', 'slug', 'description']
   if (data.page === 'users') return ['name', 'email', 'role', 'last_login_at']
+  if (state.tab === 'environments') return ['name', 'slug']
   if (state.tab === 'keys') return ['name', 'prefix', 'scopes', 'last_used_at']
   if (state.tab === 'proposals') return ['environment', 'key', 'action', 'value', 'reason']
   return ['key', 'value', 'description', 'updated_at']
@@ -111,7 +115,7 @@ onUnmounted(() => {
   <div class="flex flex-wrap gap-2 my-4">
     <template v-if="data.page === 'project'">
       <button
-        v-for="tab in ['items', 'keys', 'proposals']"
+        v-for="tab in tabs"
         :key="tab"
         class="tabs-trigger"
         :data-active="state.tab === tab"
@@ -176,7 +180,7 @@ onUnmounted(() => {
             </button>
           </td>
           <td v-if="data.canWrite || data.isAdmin" :data-label="msg('common.actions')">
-            <button v-if="!reviewing" class="btn-ghost" :disabled="state.busy" @click="edit(row)">
+            <button v-if="canEditRow" class="btn-ghost" :disabled="state.busy" @click="edit(row)">
               {{ msg('common.edit') }}
             </button>
             <DangerActions

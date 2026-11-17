@@ -46,6 +46,7 @@ function sensitive(field) {
   <dialog ref="dialog" class="dialog-panel" :aria-label="form.title" @cancel="cancel">
     <form class="space-y-3" @submit.prevent="form.submit">
       <h2 class="text-base font-semibold">{{ form.title }}</h2>
+      <p v-if="form.description" class="field">{{ form.description }}</p>
       <template v-if="!form.token">
         <CheckboxField
           v-if="form.secret !== null"

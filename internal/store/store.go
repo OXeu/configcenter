@@ -273,44 +273,6 @@ func (s *Store) DeleteProject(ctx context.Context, id uint) error {
 	return nil
 }
 
-// ListEnvironments returns the environments of a project.
-func (s *Store) ListEnvironments(ctx context.Context, projectID uint) ([]Environment, error) {
-	var envs []Environment
-	if err := s.db.WithContext(ctx).Where("project_id = ?", projectID).Order("slug").Find(&envs).Error; err != nil {
-		return nil, fmt.Errorf("list environments: %w", err)
-	}
-	return envs, nil
-}
-
-// EnvironmentBySlug loads an environment inside a project.
-func (s *Store) EnvironmentBySlug(ctx context.Context, projectID uint, slug string) (Environment, error) {
-	var e Environment
-	err := s.db.WithContext(ctx).Where("project_id = ? AND slug = ?", projectID, slug).First(&e).Error
-	return e, queryErr("load environment", err)
-}
-
-// CreateEnvironment adds an environment to a project.
-func (s *Store) CreateEnvironment(ctx context.Context, e Environment) (Environment, error) {
-	if err := s.db.WithContext(ctx).Create(&e).Error; err != nil {
-		return Environment{}, fmt.Errorf("create environment: %w", err)
-	}
-	return e, nil
-}
-
-// DeleteEnvironment removes an environment and its items.
-func (s *Store) DeleteEnvironment(ctx context.Context, projectID, id uint) error {
-	err := s.Transaction(ctx, func(tx *Store) error {
-		if err := tx.db.Where("project_id = ? AND environment_id = ?", projectID, id).Delete(&ConfigItem{}).Error; err != nil {
-			return fmt.Errorf("delete environment items: %w", err)
-		}
-		if err := tx.db.Where("project_id = ? AND id = ?", projectID, id).Delete(&Environment{}).Error; err != nil {
-			return fmt.Errorf("delete environment: %w", err)
-		}
-		return nil
-	})
-	return err
-}
-
 // ListItems returns the items of one environment, optionally filtered by key prefix.
 func (s *Store) ListItems(ctx context.Context, projectID, envID uint, keyPrefix string) ([]ConfigItem, error) {
 	q := s.db.WithContext(ctx).Where("project_id = ? AND environment_id = ?", projectID, envID)

@@ -5,6 +5,7 @@ export const dangerOperations = {
   rotateKey: 'projects.rotate',
   deleteProject: 'common.delete',
   deleteEnvironment: 'common.delete',
+  renameEnvironment: 'environments.rename',
   deleteItem: 'common.delete',
   revokeKey: 'projects.revoke',
   approveProposal: 'projects.approve',
@@ -24,13 +25,19 @@ export function dangerAction(
   label: string,
   target: string,
   execute: () => Promise<void>,
+  options?: {
+    fields?: Parameters<typeof form.show>[1]
+    values?: Record<string, string>
+    description?: string
+  },
 ): DangerAction {
   return {
     [confirmedAction]: true,
     id,
     label,
     request() {
-      form.show(`${label}: ${target}`, [], {}, execute)
+      form.show(`${label}: ${target}`, options?.fields ?? [], options?.values ?? {}, execute)
+      form.description = options?.description ?? ''
       form.danger = true
     },
   }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"github.com/OXeu/configcenter/internal/auth"
 	"github.com/OXeu/configcenter/internal/slug"
@@ -67,7 +68,13 @@ func (s *Server) withProject(permissions []store.Permission, fn func(*gin.Contex
 func (s *Server) fail(c *gin.Context, err error) {
 	status := http.StatusInternalServerError
 	switch {
-	case errors.Is(err, store.ErrKeyChanged):
+	case errors.Is(err, store.ErrSystemEnvironment):
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": s.translator(c).T("environments.systemProtected")})
+		return
+	case errors.Is(err, store.ErrLastEnvironment):
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": s.translator(c).T("environments.lastProtected")})
+		return
+	case errors.Is(err, store.ErrKeyChanged), errors.Is(err, gorm.ErrDuplicatedKey):
 		status = http.StatusConflict
 	case errors.Is(err, store.ErrNotFound):
 		status = http.StatusNotFound

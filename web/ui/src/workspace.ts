@@ -5,6 +5,8 @@ import { createForm } from './forms.ts'
 import { notify } from './toast.ts'
 import { createSecretViews, type SecretRow } from './secrets.ts'
 
+export type Environment = { slug: string; name: string }
+
 /** @param {string} value */
 const enc = (value: string) => encodeURIComponent(value)
 /** @param {string} key @param {string} label @param {boolean} [required] */
@@ -18,7 +20,7 @@ export function createWorkspace(
   const form = createForm(page)
   const state = reactive({
     rows: /** @type {any[]} */ ([]) as any[],
-    environments: /** @type {any[]} */ ([]) as any[],
+    environments: [] as Environment[],
     tab: data.page === 'keys' ? 'keys' : 'items',
     view: 'all',
     env: data.env,
@@ -56,8 +58,16 @@ export function createWorkspace(
     secrets.reset()
     state.busy = true
     try {
-      if (data.page === 'project')
-        state.environments = (await api(`${base}/environments`)).environments
+      if (data.page === 'project') {
+        const result = (await api(`${base}/environments`)) as { environments: Environment[] }
+        state.environments = result.environments
+        if (state.environments.length && !state.environments.some((env) => env.slug === state.env))
+          state.env = state.environments[0].slug
+        if (state.tab === 'environments') {
+          state.rows = state.environments
+          return
+        }
+      }
       if (state.tab === 'keys') {
         const options = (await api('/api/v1/key-scopes')) as {
           projects: { slug: string; name: string }[]
@@ -124,6 +134,10 @@ export function createWorkspace(
   }
   /** @param {any} [row] */
   function edit(row?: any) {
+    if (state.tab === 'environments') {
+      newEnvironment()
+      return
+    }
     if (data.page === 'settings') {
       form.show(
         page.msg('common.edit'),
@@ -280,9 +294,46 @@ export function createWorkspace(
     })
   }
   function actionsFor(row: any) {
+    if (state.tab === 'environments') return environmentActions(row as Environment)
     if (state.tab === 'proposals') return [proposal(row, true), proposal(row, false)]
     if (state.tab === 'keys') return [rotation(row), removal(row)]
     return [removal(row)]
+  }
+  function environmentActions(row: Environment) {
+    const url = `${base}/environments/${enc(row.slug)}`
+    return [
+      dangerAction(
+        form,
+        'renameEnvironment',
+        page.msg('environments.rename'),
+        row.slug,
+        async () => {
+          const result = (await api(url, {
+            method: 'PATCH',
+            body: form.values,
+            csrf: page.csrf,
+          })) as Environment
+          if (state.env === row.slug) state.env = result.slug
+          notify('success', page.msg('toast.saved'))
+          await refresh()
+        },
+        {
+          fields: [field('slug', 'common.slug'), field('name', 'common.name')],
+          values: { slug: row.slug, name: row.name },
+          description: page.msg('environments.renameWarning'),
+        },
+      ),
+      dangerAction(
+        form,
+        'deleteEnvironment',
+        page.msg('common.delete'),
+        row.slug,
+        async () => {
+          await mutate(url, 'DELETE')
+        },
+        { description: page.msg('environments.deleteWarning') },
+      ),
+    ]
   }
   /** @returns {void} */
   function environment(): void {
