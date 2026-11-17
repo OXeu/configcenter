@@ -31,6 +31,7 @@ Shared `no-restricted-files` lint permits documentation only in top-level `docs/
 
 - `readme-layout` requires English `README.md` and Chinese `README_zh.md`, with centered logo/h3/one-sentence introduction, language links, documentation navigation, badges, Preview/Gallery, optional Features/Why, Install/Quick Start, Star History graph and LICENSE, in that order. Keep real deployment commands and valid local links; link the Apache-2.0 `LICENSE` file in both READMEs.
 - `paragraph-structure` limits Markdown paragraphs to 6 sentences and sentences to 40 whitespace-separated words. `paragraph-steps-list` requires lists for paragraphs of at least 3 sentences with sequence markers or parallel imperative actions.
+- Use the shared `Button` with `size` (sm/normal/lg/xl), `variant` (primary/secondary/ghost/danger/forbidden) and `content` (text/icon-text/icon). Button lint forbids local implementations and visual overrides; icon-only buttons need accessible names.
 
 ## Backend rules
 

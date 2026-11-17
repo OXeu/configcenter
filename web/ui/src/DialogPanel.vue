@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Button from '@oxeu/center-common/ui/Button.vue'
 import { computed, ref, watch, nextTick, useId } from 'vue'
 import DropdownSelect from '@oxeu/center-common/ui/DropdownSelect.vue'
 import CheckboxField from '@oxeu/center-common/ui/CheckboxField.vue'
@@ -81,25 +82,25 @@ function sensitive(field: { sensitive?: boolean }) {
             :required="field.required"
             :disabled="form.busy"
           />
-          <button
+          <Button
             v-if="sensitive(field)"
             type="button"
-            class="btn-ghost"
             :disabled="form.busy || form.revealing"
             :aria-pressed="form.valueRevealed"
-            @click="form.toggleValue"
+            @click="form.toggleValue()"
+            variant="ghost"
           >
             {{ msg(form.valueRevealed ? 'secret.hide' : 'secret.show') }}
-          </button>
-          <button
+          </Button>
+          <Button
             v-if="field.sensitive && form.keepSecret"
             type="button"
-            class="btn-outline"
             :disabled="form.busy || form.revealing"
-            @click="form.replaceValue"
+            @click="form.replaceValue()"
+            variant="secondary"
           >
             {{ msg('secret.replace') }}
-          </button>
+          </Button>
         </div>
         <section v-if="form.scopes !== null" class="space-y-3">
           <h3 class="text-sm font-medium">{{ msg('keys.scopes') }}</h3>
@@ -121,15 +122,16 @@ function sensitive(field: { sensitive?: boolean }) {
                 :disabled="form.busy"
                 required
               />
-              <button
+              <Button
                 type="button"
-                class="btn-outline btn-icon"
                 :aria-label="msg('keys.excludeScope')"
                 :disabled="form.busy"
                 @click="form.excludeScope(scope.id)"
+                variant="secondary"
+                content="icon"
+                icon="ri-close-line"
               >
-                <i class="ri-close-line" aria-hidden="true"></i>
-              </button>
+              </Button>
             </div>
             <div class="grid gap-1 sm:grid-cols-2">
               <CheckboxField
@@ -142,15 +144,15 @@ function sensitive(field: { sensitive?: boolean }) {
               />
             </div>
           </fieldset>
-          <button
+          <Button
             v-if="canAddScope"
             type="button"
-            class="btn-outline"
             :disabled="form.busy"
-            @click="form.addScope"
+            @click="form.addScope()"
+            variant="secondary"
           >
             {{ msg('keys.addScope') }}
-          </button>
+          </Button>
         </section>
       </template>
       <p v-if="form.token" class="field">
@@ -158,17 +160,17 @@ function sensitive(field: { sensitive?: boolean }) {
       </p>
       <p v-if="form.error" class="field">{{ form.error }}</p>
       <div class="flex flex-wrap justify-end gap-2">
-        <button class="btn-ghost" type="button" :disabled="form.busy" @click="form.open = false">
+        <Button type="button" :disabled="form.busy" @click="form.open = false" variant="ghost">
           {{ msg('common.cancel') }}
-        </button>
-        <button
+        </Button>
+        <Button
           v-if="!form.token"
-          :class="form.danger ? 'btn-danger' : 'btn'"
+          :variant="form.danger ? 'danger' : 'primary'"
           type="submit"
           :disabled="form.busy || form.revealing"
         >
           {{ msg('confirm.ok') }}
-        </button>
+        </Button>
       </div>
     </form>
   </dialog>

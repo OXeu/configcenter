@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Button from '@oxeu/center-common/ui/Button.vue'
 import { computed, defineAsyncComponent, onMounted, watch } from 'vue'
 import PageHeader from './PageHeader.vue'
 import { createPage } from './page.ts'
@@ -49,9 +50,13 @@ onMounted(() => {
       subtitle=""
       @toggle-theme="toggleTheme"
     >
-      <a v-if="data.page === 'login' && data.oauthEnabled" class="btn mt-4" href="/auth/login">{{
-        msg('login.continue', { ProviderName: data.providerName })
-      }}</a>
+      <Button
+        class="mt-4"
+        v-if="data.page === 'login' && data.oauthEnabled"
+        href="/auth/login"
+        variant="primary"
+        >{{ msg('login.continue', { ProviderName: data.providerName }) }}</Button
+      >
       <WorkspacePage v-if="isWorkspace" :data="data" :page="page" :title="title" />
       <OAuthConsentPage v-if="data.page === 'oauth-consent'" :data="data" :page="page" />
     </PageHeader>
@@ -60,16 +65,17 @@ onMounted(() => {
       class="mx-auto flex max-w-6xl flex-wrap gap-2 px-4 py-4 sm:px-6 sm:py-6"
       :aria-label="msg('docs.navigation')"
     >
-      <a
+      <Button
         v-for="link in docsLinks"
         :key="link.page"
         :href="link.href"
-        class="tabs-trigger inline-flex items-center"
         :data-active="data.docPage === link.page"
         :aria-current="data.docPage === link.page ? 'page' : undefined"
-        >{{ msg(link.label) }}</a
+        variant="ghost"
+        size="sm"
+        >{{ msg(link.label) }}</Button
       >
-      <a class="btn-ghost ml-auto" :href="rawDocument">{{ msg('docs.raw') }}</a>
+      <Button class="ml-auto" :href="rawDocument" variant="ghost">{{ msg('docs.raw') }}</Button>
     </nav>
   </div>
 </template>

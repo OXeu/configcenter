@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Button from '@oxeu/center-common/ui/Button.vue'
 import { ref } from 'vue'
 import { api } from './core.ts'
 import type { PageData } from './data.ts'
@@ -46,12 +47,12 @@ async function decide(approve: boolean) {
       </div>
     </dl>
     <div class="flex flex-wrap gap-2">
-      <button class="btn" type="button" :disabled="busy" @click="decide(true)">
+      <Button type="button" :disabled="busy" @click="decide(true)" variant="primary">
         {{ msg('oauth.allow') }}
-      </button>
-      <button class="btn-outline" type="button" :disabled="busy" @click="decide(false)">
+      </Button>
+      <Button type="button" :disabled="busy" @click="decide(false)" variant="secondary">
         {{ msg('oauth.deny') }}
-      </button>
+      </Button>
     </div>
   </section>
 </template>

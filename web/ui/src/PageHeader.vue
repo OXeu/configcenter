@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Button from '@oxeu/center-common/ui/Button.vue'
 import NavigationLink from '@oxeu/center-common/ui/NavigationLink.vue'
 import DropdownMenu from '@oxeu/center-common/ui/DropdownMenu.vue'
 import DangerActions from './DangerActions.vue'
@@ -70,42 +71,49 @@ async function logout(): Promise<void> {
 <template>
   <NavigationLink class="sr-only" href="#main">{{ msg('nav.skip') }}</NavigationLink>
   <header class="flex flex-wrap items-center gap-2 border-b px-4 py-3 sm:gap-4 sm:px-6">
-    <NavigationLink
-      class="btn-ghost btn-icon mr-auto sm:mr-0"
+    <Button
+      class="mr-auto sm:mr-0"
       href="/projects"
       :aria-label="msg('app.name')"
+      variant="ghost"
+      content="icon"
     >
-      <img :src="brandIcon.src" :srcset="brandIcon.srcset" width="32" height="32" alt="" />
-    </NavigationLink>
+      <template #icon
+        ><img :src="brandIcon.src" :srcset="brandIcon.srcset" width="32" height="32" alt=""
+      /></template>
+    </Button>
     <nav
       class="order-last flex w-full flex-wrap gap-1 sm:order-none sm:w-auto sm:flex-1"
       :aria-label="msg('nav.main')"
     >
-      <NavigationLink v-if="data.loggedIn" class="btn-ghost" href="/projects">{{
+      <Button v-if="data.loggedIn" href="/projects" variant="ghost">{{
         msg('nav.projects')
-      }}</NavigationLink>
-      <NavigationLink v-if="data.isAdmin" class="btn-ghost" href="/settings">{{
+      }}</Button>
+      <Button v-if="data.isAdmin" href="/settings" variant="ghost">{{
         msg('title.settings')
-      }}</NavigationLink>
-      <NavigationLink class="btn-ghost" href="/docs/">{{ msg('nav.docs') }}</NavigationLink>
+      }}</Button>
+      <Button href="/docs/" variant="ghost">{{ msg('nav.docs') }}</Button>
     </nav>
-    <button
-      class="btn-ghost btn-icon"
+    <Button
       type="button"
       :aria-label="themeLabel"
       @click="emit('toggle-theme')"
+      variant="ghost"
+      content="icon"
+      :icon="themeIcon"
     >
-      <i :class="themeIcon" aria-hidden="true"></i>
-    </button>
+    </Button>
     <DropdownMenu :label="data.languageLabel" compact>
       <template #trigger><i class="ri-global-line" aria-hidden="true"></i></template>
-      <NavigationLink
+      <Button
         v-for="language in data.languages"
         :key="language.tag"
-        class="block rounded-sm px-2 py-1 text-sm hover:bg-muted"
         :href="`/language?lang=${language.tag}`"
         :aria-current="language.tag === data.lang ? 'true' : undefined"
-        >{{ language.label }}</NavigationLink
+        variant="ghost"
+        block
+        align="start"
+        >{{ language.label }}</Button
       >
     </DropdownMenu>
     <template v-if="data.loggedIn && data.me">
@@ -147,22 +155,28 @@ async function logout(): Promise<void> {
             </div>
           </div>
           <div class="border-t border-gray-200 pt-1">
-            <NavigationLink
-              class="btn-ghost w-full justify-start gap-2"
+            <Button
               href="/keys"
               :aria-label="msg('title.keys')"
+              variant="ghost"
+              block
+              align="start"
+              content="icon-text"
+              icon="ri-key-2-line"
             >
-              <i class="ri-key-2-line" aria-hidden="true"></i>
               <span>{{ msg('nav.keys') }}</span>
-            </NavigationLink>
-            <NavigationLink
+            </Button>
+            <Button
               v-if="data.isAdmin"
-              class="btn-ghost w-full justify-start gap-2"
               href="/users"
+              variant="ghost"
+              block
+              align="start"
+              content="icon-text"
+              icon="ri-group-line"
             >
-              <i class="ri-group-line" aria-hidden="true"></i>
               <span>{{ msg('nav.users') }}</span>
-            </NavigationLink>
+            </Button>
           </div>
           <div class="mt-1 border-t pt-1">
             <DangerActions
