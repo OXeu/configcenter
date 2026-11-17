@@ -30,6 +30,7 @@ Commit messages follow [`docs/commits.md`](docs/commits.md): Conventional Commit
 Shared `no-restricted-files` lint permits documentation only in top-level `docs/`, `.github/`, and the root `README.md`, `README_zh.md`, `AGENTS.md` and `LICENSE`. Keep temporary explanations, plans and reports in ignored `.tmp/`; never add them to the root or source directories.
 
 - `readme-layout` requires English `README.md` and Chinese `README_zh.md`, with centered logo/h3/one-sentence introduction, language links, documentation navigation, badges, Preview/Gallery, optional Features/Why, Install/Quick Start, Star History graph and LICENSE, in that order. Keep real deployment commands and valid local links; link the Apache-2.0 `LICENSE` file in both READMEs.
+- `paragraph-structure` limits Markdown paragraphs to 6 sentences and sentences to 40 whitespace-separated words. `paragraph-steps-list` requires lists for paragraphs of at least 3 sentences with sequence markers or parallel imperative actions.
 
 ## Backend rules
 
@@ -54,9 +55,17 @@ Shared `no-restricted-files` lint permits documentation only in top-level `docs/
 ## Frontend rules
 
 1. **Vue 3 composition API.** Components live in `web/ui/src`, use `<script setup>`, reactive state and props. Pages share `DialogPanel.vue` and `workspace.ts`; no Alpine directives or direct DOM mutation.
-2. **Inputs live in dialogs.** Native `<select>` / `<option>` selectors are forbidden by template lint; use `DropdownSelect` for selection fields. All inputs, dropdown selectors and textareas belong in the native shared `<dialog>`. Page bodies carry buttons and read-only views. Native `showModal()` provides focus containment, Escape and focus restoration; busy submissions cannot be cancelled.
-   Native `<input type="checkbox">` is forbidden, including bound types and attribute spreads that cannot rule out checkbox inputs. Use `CheckboxField` for boolean or multiple-choice fields inside dialogs.
-   Dropdowns use `DropdownMenu` or `DropdownSelect`. Their panels use the shared `.dropdown-panel` fixed positioning and `useDropdownPosition`; opening a dropdown must not insert content into normal flow, resize surrounding content or change a parent's overflow. Template and CSS lint reject custom panels and position overrides, including responsive overrides.
+2. **Inputs live in dialogs.**
+
+   - Native `<select>` / `<option>` selectors are forbidden by template lint; use `DropdownSelect` for selection fields.
+   - All inputs, dropdown selectors and textareas belong in the native shared `<dialog>`.
+   - Page bodies carry buttons and read-only views.
+   - Native `showModal()` provides focus containment, Escape and focus restoration; busy submissions cannot be cancelled.
+   - Native `<input type="checkbox">` is forbidden, including bound types and attribute spreads that cannot rule out checkbox inputs.
+   - Use `CheckboxField` for boolean or multiple-choice fields inside dialogs.
+   - Dropdowns use `DropdownMenu` or `DropdownSelect`.
+   - Their panels use the shared `.dropdown-panel` fixed positioning and `useDropdownPosition`; opening a dropdown must not insert content into normal flow, resize surrounding content or change a parent's overflow.
+   - Template and CSS lint reject custom panels and position overrides, including responsive overrides.
 3. **Reuse styles.** Use the `.card`, `.btn`, `.field`, `.input`, `.table`, `.badge` and `.tabs-trigger` classes in `web/ui/theme.css`. Avoid decorative wrappers and duplicate state markup.
 4. **Messages are toasts.** Use `notify()` from `web/ui/src/toast.ts` or `page.report(err)`. No inline alerts, tooltips or popovers. Dialog validation remains inert `.field` text. Server flash text is already translated and delivered in the JSON payload. Ding receives the per-request CSP style nonce.
 5. **Vue owns the DOM.** Oxlint's `center/no-page-dom-access` bans document calls and HTML sinks in scripts. Only `main.ts` reads `#page-data` once. Component template refs may call native dialog methods; do not query or rewrite page DOM.
@@ -64,8 +73,23 @@ Shared `no-restricted-files` lint permits documentation only in top-level `docs/
 7. **Short templates.** Directive expressions are at most 50 characters. Move behavior and complex conditions to named functions or computed state. Component files stay below 400 nonblank lines.
 8. **Translations.** Components use `msg(id, vars)` from `web/ui/src/i18n.ts`. Both English and Chinese catalogs in `internal/i18n/locales` contain every ID; the same catalogs supply frontend fallbacks and Go page messages. Keep `/language?lang=` and the header language menu. Do not retranslate server flash text.
 9. **Icons.** Use Remix Icon classes with `aria-hidden="true"`. No SVG markup or emoji in templates. The favicon and vendored icon font remain static assets.
-10. **Types and formatting.** JavaScript/TypeScript scripts must use `.ts`; every Vue script block must use `lang="ts"`. Shared repository lint rejects other script extensions, including `.mjs`. TypeScript modules use native type annotations. `npm run typecheck` runs TypeScript 7 for modules, tools and non-component tests, and vue-tsc with its TypeScript 6 compatibility dependency for Vue templates and component tests. Cast untyped API payloads explicitly at boundaries. Vite Plus provides Oxlint, Oxfmt, Vitest and the production build. `npm run lint`, `npm run typecheck`, `npm test` and `npm run build` must pass.
-11. **Artifacts.** Vite outputs only `.tmp/ui`; Shiki and Markdown rendering output `.tmp/docs`. Go embeds both directories. Run `make assets` before direct Go tooling after a clean checkout. `make test`, `make lint`, `make check` and `make build` prepare it automatically. Keep `.tmp/ui` and `.tmp/docs` for subsequent builds; binaries belong in `.tmp/bin`. No generated bundles are committed.
+10. **Types and formatting.**
+
+    - JavaScript/TypeScript scripts must use `.ts`; every Vue script block must use `lang="ts"`.
+    - Shared repository lint rejects other script extensions, including `.mjs`.
+    - TypeScript modules use native type annotations.
+    - `npm run typecheck` runs TypeScript 7 for modules, tools and non-component tests, and vue-tsc with its TypeScript 6 compatibility dependency for Vue templates and component tests.
+    - Cast untyped API payloads explicitly at boundaries.
+    - Vite Plus provides Oxlint, Oxfmt, Vitest and the production build.
+    - `npm run lint`, `npm run typecheck`, `npm test` and `npm run build` must pass.
+11. **Artifacts.**
+
+    - Vite outputs only `.tmp/ui`; Shiki and Markdown rendering output `.tmp/docs`.
+    - Go embeds both directories.
+    - Run `make assets` before direct Go tooling after a clean checkout.
+    - `make test`, `make lint`, `make check` and `make build` prepare it automatically.
+    - Keep `.tmp/ui` and `.tmp/docs` for subsequent builds; binaries belong in `.tmp/bin`.
+    - No generated bundles are committed.
 
 ## Testing
 
@@ -83,7 +107,12 @@ Shared `no-restricted-files` lint permits documentation only in top-level `docs/
 
 Signing out is a dangerous operation, including controls labeled `退出登录`, `Sign out`, `Logout` or `nav.signOut`.
 
-Register dangerous operations in `web/ui/src/danger.ts`. Construct actions with `dangerAction()` so execution is deferred to the shared confirmation dialog. Render them only through `DangerActions` with the translated More label; it uses `DropdownMenu` and `.btn-danger`. All secondary menus use `DropdownMenu`. `npm run lint` checks every Vue template for dangerous labels/markers, custom secondary menus, shared styles and the confirmation request handler. New operations must add an explicit registry ID; arbitrary handler aliases cannot be inferred from text alone.
+- Register dangerous operations in `web/ui/src/danger.ts`.
+- Construct actions with `dangerAction()` so execution is deferred to the shared confirmation dialog.
+- Render them only through `DangerActions` with the translated More label; it uses `DropdownMenu` and `.btn-danger`.
+- All secondary menus use `DropdownMenu`.
+- `npm run lint` checks every Vue template for dangerous labels/markers, custom secondary menus, shared styles and the confirmation request handler.
+- New operations must add an explicit registry ID; arbitrary handler aliases cannot be inferred from text alone.
 
 Icon buttons (icon children, `IconButton`, `icon` props or `data-icon-button`) may show at most 4 Unicode characters when the text contains Han characters, otherwise 10. Whitespace and punctuation count after whitespace normalization and trimming. Every translation and statically resolvable computed branch is checked by `npm run lint`; unresolved dynamic labels fail. Accessible names for icon-only buttons are exempt from this visible-text limit.
 

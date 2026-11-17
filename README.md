@@ -48,7 +48,11 @@ Open http://127.0.0.1:8080. This starts a local SQLite instance; sign-in remains
 
 ### Enable sign-in
 
-Create an OAuth application at your identity provider with callback `http://127.0.0.1:8080/oauth/callback`. Set `CC_OAUTH_ISSUER`, `CC_OAUTH_CLIENT_ID` and `CC_OAUTH_CLIENT_SECRET` in an ignored `.env.local`, then restart the binary. Set `CC_BOOTSTRAP_ADMIN_EMAIL` to the intended administrator’s verified email before the first database initialization. Use `CC_PUBLIC_URL` for the deployed public address.
+1. Create an OAuth application at your identity provider with callback `http://127.0.0.1:8080/oauth/callback`.
+2. Set `CC_OAUTH_ISSUER`, `CC_OAUTH_CLIENT_ID` and `CC_OAUTH_CLIENT_SECRET` in an ignored `.env.local`.
+3. Set `CC_BOOTSTRAP_ADMIN_EMAIL` to the intended administrator’s verified email before the first database initialization.
+4. Set `CC_PUBLIC_URL` to the deployed public address when deploying beyond localhost.
+5. Restart the binary to apply the configuration.
 
 ### Production and development
 

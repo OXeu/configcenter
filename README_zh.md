@@ -48,7 +48,11 @@ CC_DB=file:.tmp/configcenter.db ./.tmp/bin/configcenter
 
 ### 启用登录
 
-在身份提供商创建 OAuth 应用，回调地址填写 `http://127.0.0.1:8080/oauth/callback`。将 `CC_OAUTH_ISSUER`、`CC_OAUTH_CLIENT_ID`、`CC_OAUTH_CLIENT_SECRET` 写入被忽略的 `.env.local`，然后重启程序。首次初始化数据库前，将 `CC_BOOTSTRAP_ADMIN_EMAIL` 设为目标管理员已验证的邮箱。部署到公网时设置 `CC_PUBLIC_URL`。
+1. 在身份提供商创建 OAuth 应用，回调地址填写 `http://127.0.0.1:8080/oauth/callback`。
+2. 将 `CC_OAUTH_ISSUER`、`CC_OAUTH_CLIENT_ID`、`CC_OAUTH_CLIENT_SECRET` 写入被忽略的 `.env.local`。
+3. 首次初始化数据库前，将 `CC_BOOTSTRAP_ADMIN_EMAIL` 设为目标管理员已验证的邮箱。
+4. 部署到公网时，将 `CC_PUBLIC_URL` 设为实际公网地址。
+5. 重启程序，使配置生效。
 
 ### 生产部署与开发
 

@@ -8,7 +8,11 @@ Open `/docs/` on your running server for the integration documentation. Public M
 
 ## Stack
 
-Go 1.26, gin, gorm (SQLite), a Go HTML/JSON shell plus Vue 3 (built with Vite Plus), shadcn/ui-style Tailwind CSS with Remix Icon (font vendored, no inline SVG), transient messages as [ding](https://github.com/YusufCeng1z/ding) toasts instead of inline alert elements, a plain OAuth 2.0 authorization-code + PKCE client that works with any OIDC issuer (or a plain OAuth server with a userinfo endpoint).
+- Go 1.26, gin and gorm with SQLite.
+- A Go HTML/JSON shell plus Vue 3, built with Vite Plus.
+- shadcn/ui-style Tailwind CSS with Remix Icon, using a vendored font without inline SVG.
+- Transient messages as [ding](https://github.com/YusufCeng1z/ding) toasts.
+- An OAuth 2.0 authorization-code + PKCE client for OIDC issuers or plain OAuth servers with a userinfo endpoint.
 
 ## Quick start
 
@@ -24,7 +28,14 @@ CC_OAUTH_CLIENT_SECRET=... \
 
 Open http://127.0.0.1:8080. Without OAuth configured the server still starts; only the login link is disabled.
 
-GitHub can be used as the identity provider (`CC_OAUTH_ISSUER=https://github.com`, a GitHub OAuth app with the callback `CC_PUBLIC_URL/oauth/callback`): GitHub publishes no OIDC discovery document, so the client falls back to GitHub's documented OAuth endpoints, sends the client ID and secret in the token request form, skips `openid`/PKCE, reads the profile from `/user` and the primary address from `/user/emails`. Accounts without a public email get `<id>@github.com`.
+GitHub can be used as the identity provider with `CC_OAUTH_ISSUER=https://github.com` and an OAuth app with callback `CC_PUBLIC_URL/oauth/callback`. GitHub publishes no OIDC discovery document, so the client:
+
+- Falls back to GitHub's documented OAuth endpoints.
+- Sends the client ID and secret in the token request form.
+- Skips `openid` and PKCE.
+- Reads the profile from `/user` and the primary address from `/user/emails`.
+
+Accounts without a public email get `<id>@github.com`.
 
 ## Configuration
 
@@ -110,7 +121,16 @@ if err := client.Watch(ctx, configcenter.WatchOptions{Interval: 30 * time.Second
 
 The key decides the project, so the SDK never takes a project name.
 
-Reads resolve each key from unexpired memory cache, then ConfigCenter, then godotenv files, then `Config.Defaults` or the getter's default. Empty strings count as configured values. Each client has an isolated memory map; `CacheTTL` defaults to 30 seconds and cache hits never extend it. `Load` and `Watch` skip remote requests when their full scope is cached, and refresh after expiry. Getters reject expired entries and use loaded fallbacks without network requests. No cache is persisted to disk. `DotenvFiles` defaults to an optional `.env` without changing process environment variables. Source failures return errors while exposing available fallback values. When both remote connection fields are empty, `Put` writes only to memory with the same TTL; partial remote configuration is rejected. See the [SDK guide](sdk.md) for initialization, source composition and error handling.
+Reads resolve each key in this order:
+
+1. Unexpired memory cache.
+2. ConfigCenter.
+3. godotenv files.
+4. `Config.Defaults` or the getter's default.
+
+Empty strings count as configured values. Each client has an isolated memory map; `CacheTTL` defaults to 30 seconds and cache hits never extend it. `Load` and `Watch` skip remote requests when their full scope is cached, and refresh after expiry. Getters reject expired entries and use loaded fallbacks without network requests. No cache is persisted to disk.
+
+`DotenvFiles` defaults to an optional `.env` without changing process environment variables. Source failures return errors while exposing available fallback values. When both remote connection fields are empty, `Put` writes only to memory with the same TTL; partial remote configuration is rejected. See the [SDK guide](sdk.md) for initialization, source composition and error handling.
 
 ## Development
 
@@ -167,13 +187,16 @@ CC_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
 
 The workflow packages this file privately with the function code, removes the
 runner copy after deployment, and never uploads the package as a GitHub artifact.
-SCF forces MySQL, production mode and port 9000. The HTTP trigger exposes a
-function URL with public and private access. Cloud-level authentication is NONE;
-the application enforces OAuth sessions and API keys. Set CC_PUBLIC_URL to the
-function URL or its custom domain and register its /oauth/callback URL at the
-identity provider. The VPC must also permit outbound access to the identity provider.
 The selected Tencent action runs serverless-cloud-framework; its source is pinned,
 but its upstream CLI installation is not version-pinned.
+
+SCF forces MySQL, production mode and port 9000. The HTTP trigger exposes a
+function URL with public and private access. Cloud-level authentication is NONE;
+the application enforces OAuth sessions and API keys.
+
+1. Set `CC_PUBLIC_URL` to the function URL or its custom domain.
+2. Register its `/oauth/callback` URL at the identity provider.
+3. Permit outbound access to the identity provider from the VPC.
 
 SCF uses Beijing time (`TZ=Asia/Shanghai`), 64 MB of memory, static concurrency
 of 100 requests per instance and a one-second request buffer. After deploying,
