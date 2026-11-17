@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch, nextTick, useId } from 'vue'
 import DropdownSelect from '@oxeu/center-common/ui/DropdownSelect.vue'
 import CheckboxField from '@oxeu/center-common/ui/CheckboxField.vue'
@@ -9,13 +9,13 @@ const props = defineProps({
 })
 const canAddScope = computed(() =>
   props.form.scopeProjects.some(
-    (/** @type {import('./forms.ts').Choice} */ option) =>
+    (option: import('./forms.ts').Choice) =>
       !props.form.scopes?.some(
-        (/** @type {import('./forms.ts').ScopeDraft} */ scope) => scope.project === option.value,
+        (scope: import('./forms.ts').ScopeDraft) => scope.project === option.value,
       ),
   ),
 )
-const dialog = ref(/** @type {HTMLDialogElement | null} */ (null))
+const dialog = ref<HTMLDialogElement | null>(null)
 watch(
   () => props.form.open,
   async (open) => {
@@ -25,20 +25,17 @@ watch(
   },
   { immediate: true },
 )
-/** @param {Event} event */
-function cancel(event) {
+function cancel(event: Event) {
   if (props.form.busy) {
     event.preventDefault()
     return
   }
   props.form.open = false
 }
-/** @param {{ sensitive?: boolean }} field */
-function hidden(field) {
+function hidden(field: { sensitive?: boolean }) {
   return sensitive(field) && !props.form.valueRevealed
 }
-/** @param {{ sensitive?: boolean }} field */
-function sensitive(field) {
+function sensitive(field: { sensitive?: boolean }) {
   return field.sensitive && (props.form.secret || props.form.keepSecret)
 }
 </script>

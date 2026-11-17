@@ -34,6 +34,7 @@ const scratch = join(root, '.tmp')
 mkdirSync(scratch, { recursive: true })
 const local = join(scratch, 'common-local')
 const active = join(scratch, 'common')
+const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'"
 function link(target: string, path: string) {
   const stat = lstatSync(path, { throwIfNoEntry: false })
   if (stat && !stat.isSymbolicLink()) throw new Error(`Refusing to replace non-symlink: ${path}`)
@@ -66,7 +67,7 @@ if (args[0] !== '--locked' && !process.env.CI && existsSync(local)) {
       if (
         env.COMMON_REPO_SSH_KEY &&
         command[0] === 'fetch' &&
-        /^https:\/\/github\.com\//u.test(lock.repository)
+        lock.repository.startsWith('https://github.com/')
       ) {
         credentials = mkdtempSync(join(scratch, 'common-ssh-'))
         const key = join(credentials, 'key')
@@ -76,7 +77,6 @@ if (args[0] !== '--locked' && !process.env.CI && existsSync(local)) {
           hosts,
           'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n',
         )
-        const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'"
         env.GIT_SSH_COMMAND = `ssh -i ${quote(key)} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${quote(hosts)}`
         command = command.map((value) =>
           value === lock.repository
@@ -84,7 +84,7 @@ if (args[0] !== '--locked' && !process.env.CI && existsSync(local)) {
             : value,
         )
       }
-      if (env.COMMON_REPO_TOKEN && /^https:\/\/github\.com\//u.test(lock.repository)) {
+      if (env.COMMON_REPO_TOKEN && lock.repository.startsWith('https://github.com/')) {
         const index = Number(env.GIT_CONFIG_COUNT ?? 0)
         env.GIT_CONFIG_COUNT = String(index + 2)
         env[`GIT_CONFIG_KEY_${index}`] = 'http.https://github.com/.extraheader'

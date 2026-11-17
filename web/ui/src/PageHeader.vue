@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import DropdownMenu from '@oxeu/center-common/ui/DropdownMenu.vue'
 import DangerActions from './DangerActions.vue'
 import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
@@ -9,9 +9,7 @@ import { dangerAction } from './danger.ts'
 
 const DialogPanel = defineAsyncComponent(() => import('./DialogPanel.vue'))
 
-/**
- * @typedef {import('./data.ts').PageData} PageData
- */
+import type { PageData } from './data.ts'
 
 const props = defineProps({
   data: { type: Object, required: true },
@@ -30,8 +28,8 @@ const brandIcon = {
 const themeLabel = computed(() => msg(props.theme === 'dark' ? 'theme.toLight' : 'theme.toDark'))
 const themeIcon = computed(() => (props.theme === 'dark' ? 'ri-moon-line' : 'ri-sun-line'))
 
-const data = /** @type {PageData} */ (props.data)
-const msg = /** @type {(id: string, vars?: Record<string, string>) => string} */ (props.msg)
+const data = props.data as PageData
+const msg = props.msg as (id: string, vars?: Record<string, string>) => string
 const avatarFailed = ref(false)
 const avatarSource = computed(() => data.me?.avatar_url ?? '')
 const showAvatar = computed(() => Boolean(avatarSource.value) && !avatarFailed.value)
@@ -49,7 +47,7 @@ const avatarInitial = computed(() => {
 const identityLabel = computed(() => `${data.me?.name ?? ''} ${roleLabel.value}`)
 const roleLabel = computed(() => (data.me === null ? '' : msg(`role.${data.me.role}`)))
 const form = createForm(createPage(data))
-const userMenu = ref(/** @type {InstanceType<typeof DropdownMenu> | null} */ (null))
+const userMenu = ref<InstanceType<typeof DropdownMenu> | null>(null)
 const accountActions = computed(() => [
   dangerAction(form, 'signOut', msg('nav.signOut'), data.me?.name ?? '', logout),
 ])
@@ -62,8 +60,7 @@ watch(
     }
   },
 )
-/** @returns {Promise<void>} */
-async function logout() {
+async function logout(): Promise<void> {
   await api('/logout', { method: 'POST', csrf: data.csrf })
   location.assign('/login')
 }
