@@ -27,6 +27,8 @@ Commit messages follow [`docs/commits.md`](docs/commits.md): Conventional Commit
 5. **Go's scratch space.** `go test` and `go build` write their intermediate working directory to `$TMPDIR`, which defaults to `/tmp`; `go` removes it on exit. `make test` sets `TMPDIR` to `.tmp`, so `make test` and `make check` never touch `/tmp`. Run Go commands through `make` or set `TMPDIR=$PWD/.tmp` yourself. The build cache (`GOCACHE`) is a cache, not an artifact, and stays where the environment puts it.
 6. Verify: after a task that ran tests or experiments, `git status --short` shows no new untracked paths other than those intended for the task, and `.tmp/` contains only what is still needed.
 
+Shared `no-restricted-files` lint permits documentation only in top-level `docs/`, `.github/`, and the root `README.md` and `AGENTS.md`. Keep temporary explanations, plans and reports in ignored `.tmp/`; never add them to the root or source directories.
+
 ## Backend rules
 
 1. **errcheck** — every returned error is handled. `check-blank: true`: `_ = risky()` is a lint failure too.
