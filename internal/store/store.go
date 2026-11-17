@@ -50,6 +50,9 @@ func Open(ctx context.Context, dialector gorm.Dialector, adminEmail, adminName s
 	if err := s.ensureSystemProject(ctx); err != nil {
 		return nil, err
 	}
+	if err := s.ensurePrimaryEnvironments(ctx); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -230,7 +233,7 @@ func (s *Store) CreateProject(ctx context.Context, p Project, defaultEnv Environ
 		if err := tx.db.Create(&defaultEnv).Error; err != nil {
 			return fmt.Errorf("create default environment: %w", err)
 		}
-		return nil
+		return tx.setPrimaryEnvironment(ctx, p.ID, defaultEnv.ID)
 	})
 	if err != nil {
 		return Project{}, err

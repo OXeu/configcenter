@@ -166,5 +166,8 @@
   "environments.renameWarning": "修改环境标识会破坏已有业务连接。请同步修改客户端使用的环境标识后重新连接。",
   "environments.deleteWarning": "此操作将永久删除环境及其全部配置和提案，并破坏已有业务连接。",
   "environments.systemProtected": "系统的 production 环境用于存储系统设置，不能修改标识或删除。",
-  "environments.lastProtected": "项目至少需要保留一个环境。"
+  "environments.primary": "主环境",
+  "environments.setPrimary": "设为主环境",
+  "environments.primaryHelp": "所有人打开此项目时将默认进入该环境，已有业务连接仍使用各自配置的环境。",
+  "environments.primaryProtected": "请先将其他环境设为主环境，再删除此环境。"
 }

@@ -166,5 +166,8 @@
   "environments.renameWarning": "Changing the slug breaks existing business connections. Update clients to use the new slug before reconnecting.",
   "environments.deleteWarning": "This permanently deletes the environment, all its configuration and proposals, and breaks existing business connections.",
   "environments.systemProtected": "The system production environment is required for settings and cannot be renamed or deleted.",
-  "environments.lastProtected": "Keep at least one environment in the project."
+  "environments.primary": "Primary",
+  "environments.setPrimary": "Set primary",
+  "environments.primaryHelp": "This environment will open by default whenever anyone opens this project. Existing clients continue using their configured environment.",
+  "environments.primaryProtected": "Select another primary environment before deleting this one."
 }

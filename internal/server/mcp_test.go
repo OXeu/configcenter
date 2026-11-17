@@ -65,6 +65,7 @@ func TestMCPCompleteAPI(t *testing.T) {
 	call("update_project", map[string]any{"project": "billing", "name": "Billing updated", "description": "managed"}, http.StatusOK)
 	call("create_environment", map[string]any{"project": "billing", "slug": "staging", "name": "Staging"}, http.StatusCreated)
 	call("rename_environment", map[string]any{"project": "billing", "environment": "staging", "slug": "staging", "name": "Preview"}, http.StatusOK)
+	call("set_primary_environment", map[string]any{"project": "billing", "environment": "production"}, http.StatusOK)
 	call("list_environments", map[string]any{"project": "billing"}, http.StatusOK)
 	call("get_project", map[string]any{"project": "billing"}, http.StatusOK)
 	config := map[string]any{"project": "billing", "environment": "staging", "key": "db/pool", "value": ""}

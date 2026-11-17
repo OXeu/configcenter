@@ -23,6 +23,7 @@ const {
   actionsFor,
   environment,
   newEnvironment,
+  setPrimaryEnvironment,
 } = createWorkspace(data, page)
 /** @param {any} row @param {string} column */
 function isSecret(row, column) {
@@ -32,13 +33,24 @@ function isSecret(row, column) {
 function isRevealed(row) {
   return secrets.values.has(row)
 }
+/** @param {any} row @param {string} column */
+function primaryBadge(row, column) {
+  return managingEnvironments.value && column === 'name' && row.is_primary
+}
+/** @param {any} row */
+function canSetPrimary(row) {
+  return managingEnvironments.value && !row.is_primary
+}
 /** @param {any} row */
 function secretLabel(row) {
   return msg(isRevealed(row) ? 'secret.hideValue' : 'secret.showValue', { key: row.key })
 }
 const canCreate = computed(
   () =>
-    data.canWrite && data.page !== 'users' && data.page !== 'settings' && state.tab !== 'proposals',
+    data.canWrite &&
+    data.page !== 'users' &&
+    data.page !== 'settings' &&
+    !['proposals', 'environments'].includes(state.tab),
 )
 const showViewSwitch = computed(() => data.isAdmin && data.page === 'projects')
 const viewLabel = computed(() => msg(state.view === 'all' ? 'projects.mine' : 'projects.all'))
@@ -167,6 +179,9 @@ onUnmounted(() => {
               >{{ row.name }}</a
             >
             <span v-else class="whitespace-pre-wrap break-all">{{ cell(row, column) }}</span>
+            <span v-if="primaryBadge(row, column)" class="badge ml-2">
+              {{ msg('environments.primary') }}
+            </span>
             <button
               v-if="isSecret(row, column)"
               type="button"
@@ -180,6 +195,14 @@ onUnmounted(() => {
             </button>
           </td>
           <td v-if="data.canWrite || data.isAdmin" :data-label="msg('common.actions')">
+            <button
+              v-if="canSetPrimary(row)"
+              class="btn-ghost"
+              :disabled="state.busy"
+              @click="setPrimaryEnvironment(row)"
+            >
+              {{ msg('environments.setPrimary') }}
+            </button>
             <button v-if="canEditRow" class="btn-ghost" :disabled="state.busy" @click="edit(row)">
               {{ msg('common.edit') }}
             </button>

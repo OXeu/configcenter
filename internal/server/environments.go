@@ -35,5 +35,17 @@ func (s *Server) apiRenameEnvironment(c *gin.Context, project store.Project) {
 		return
 	}
 	env.Slug, env.Name = in.Slug, in.Name
-	c.JSON(http.StatusOK, toEnvJSON(env))
+	c.JSON(http.StatusOK, toEnvJSON(env, project.PrimaryEnvironmentID))
+}
+
+func (s *Server) apiSetPrimaryEnvironment(c *gin.Context, project store.Project) {
+	env, ok := s.resolveEnv(c, project)
+	if !ok {
+		return
+	}
+	if err := s.store.SetPrimaryEnvironment(c.Request.Context(), project.ID, env.ID); err != nil {
+		s.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toEnvJSON(env, env.ID))
 }

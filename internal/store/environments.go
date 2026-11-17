@@ -11,8 +11,8 @@ import (
 // ErrSystemEnvironment protects the environment used by system settings.
 var ErrSystemEnvironment = errors.New("system environment cannot be renamed or deleted")
 
-// ErrLastEnvironment prevents projects from losing their last environment.
-var ErrLastEnvironment = errors.New("project must retain an environment")
+// ErrPrimaryEnvironment requires selecting a replacement before deletion.
+var ErrPrimaryEnvironment = errors.New("select another primary environment before deleting this one")
 
 // ListEnvironments returns the environments of a project.
 func (s *Store) ListEnvironments(ctx context.Context, projectID uint) ([]Environment, error) {
@@ -32,19 +32,38 @@ func (s *Store) EnvironmentBySlug(ctx context.Context, projectID uint, slug stri
 
 // CreateEnvironment adds an environment to a project.
 func (s *Store) CreateEnvironment(ctx context.Context, e Environment) (Environment, error) {
-	if err := s.db.WithContext(ctx).Create(&e).Error; err != nil {
-		return Environment{}, fmt.Errorf("create environment: %w", err)
+	err := s.Transaction(ctx, func(tx *Store) error {
+		project, err := tx.projectForUpdate(ctx, e.ProjectID)
+		if err != nil {
+			return err
+		}
+		if err := tx.db.Create(&e).Error; err != nil {
+			return fmt.Errorf("create environment: %w", err)
+		}
+		if project.PrimaryEnvironmentID == 0 {
+			return tx.setPrimaryEnvironment(ctx, project.ID, e.ID)
+		}
+		return nil
+	})
+	if err != nil {
+		return Environment{}, err
 	}
 	return e, nil
 }
 
-func (s *Store) environmentForUpdate(ctx context.Context, projectID, id uint) (Project, Environment, error) {
+func (s *Store) projectForUpdate(ctx context.Context, projectID uint) (Project, error) {
 	var project Project
-	if err := s.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).First(&project, projectID).Error; err != nil {
-		return Project{}, Environment{}, queryErr("lock environment project", err)
+	err := s.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).First(&project, projectID).Error
+	return project, queryErr("lock environment project", err)
+}
+
+func (s *Store) environmentForUpdate(ctx context.Context, projectID, id uint) (Project, Environment, error) {
+	project, err := s.projectForUpdate(ctx, projectID)
+	if err != nil {
+		return Project{}, Environment{}, err
 	}
 	var env Environment
-	err := s.db.WithContext(ctx).Where("project_id = ? AND id = ?", projectID, id).First(&env).Error
+	err = s.db.WithContext(ctx).Where("project_id = ? AND id = ?", projectID, id).First(&env).Error
 	return project, env, queryErr("load environment for update", err)
 }
 
@@ -75,12 +94,8 @@ func (s *Store) DeleteEnvironment(ctx context.Context, projectID, id uint) error
 		if project.Slug == "configcenter" && env.Slug == "production" {
 			return ErrSystemEnvironment
 		}
-		var count int64
-		if err := tx.db.Model(&Environment{}).Where("project_id = ?", projectID).Count(&count).Error; err != nil {
-			return fmt.Errorf("count project environments: %w", err)
-		}
-		if count <= 1 {
-			return ErrLastEnvironment
+		if project.PrimaryEnvironmentID == id {
+			return ErrPrimaryEnvironment
 		}
 		for _, model := range []any{&ConfigItem{}, &MCPProposal{}} {
 			if err := tx.db.Where("project_id = ? AND environment_id = ?", projectID, id).Delete(model).Error; err != nil {

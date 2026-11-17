@@ -5,7 +5,7 @@ import { createForm } from './forms.ts'
 import { notify } from './toast.ts'
 import { createSecretViews, type SecretRow } from './secrets.ts'
 
-export type Environment = { slug: string; name: string }
+export type Environment = { slug: string; name: string; is_primary: boolean }
 
 /** @param {string} value */
 const enc = (value: string) => encodeURIComponent(value)
@@ -62,7 +62,9 @@ export function createWorkspace(
         const result = (await api(`${base}/environments`)) as { environments: Environment[] }
         state.environments = result.environments
         if (state.environments.length && !state.environments.some((env) => env.slug === state.env))
-          state.env = state.environments[0].slug
+          state.env = (
+            state.environments.find((env) => env.is_primary) ?? state.environments[0]
+          ).slug
         if (state.tab === 'environments') {
           state.rows = state.environments
           return
@@ -335,6 +337,12 @@ export function createWorkspace(
       ),
     ]
   }
+  function setPrimaryEnvironment(row: Environment) {
+    form.show(`${page.msg('environments.setPrimary')}: ${row.slug}`, [], {}, async () => {
+      await mutate(`${base}/environments/${enc(row.slug)}/primary`, 'POST')
+    })
+    form.description = page.msg('environments.primaryHelp')
+  }
   /** @returns {void} */
   function environment(): void {
     form.show(
@@ -343,7 +351,10 @@ export function createWorkspace(
         {
           key: 'env',
           label: 'projects.environment',
-          options: state.environments.map((e) => ({ value: e.slug, label: e.name })),
+          options: state.environments.map((e) => ({
+            value: e.slug,
+            label: `${e.name} (${e.slug})${e.is_primary ? ` — ${page.msg('environments.primary')}` : ''}`,
+          })),
         },
       ],
       { env: state.env },
@@ -378,5 +389,6 @@ export function createWorkspace(
     review,
     environment,
     newEnvironment,
+    setPrimaryEnvironment,
   }
 }

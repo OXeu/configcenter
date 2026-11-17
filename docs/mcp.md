@@ -119,37 +119,39 @@ curl --fail-with-body --silent --show-error \
 
 所有参数位于 `params.arguments`，未知字段、缺失必填字段、错误类型或枚举值会被拒绝。下表除特别说明外均为字符串；`id` 是正整数，`approve`、`allow_registration` 和 `secret` 是布尔值，`scopes` 是数组。
 
-| 工具                 | 必填参数                                  | 可选参数                                     | scope                                  |
-| -------------------- | ----------------------------------------- | -------------------------------------------- | -------------------------------------- |
-| `get_identity`       | 无                                        | 无                                           | 已认证                                 |
-| `get_key_scopes`     | 无                                        | 无                                           | 已认证                                 |
-| `list_projects`      | 无                                        | `view`（`mine` 对浏览器和 OAuth 有效）       | `projects:read`                        |
-| `create_project`     | `slug`、`name`                            | `description`                                | `*` 的 `projects:write`                |
-| `update_project`     | `project`、`name`                         | `description`                                | `projects:write`                       |
-| `delete_project`     | `project`                                 | 无                                           | `projects:delete`                      |
-| `list_environments`  | `project`                                 | 无                                           | `environments:read`                    |
-| `create_environment` | `project`、`slug`、`name`                 | 无                                           | `environments:write`                   |
-| `delete_environment` | `project`、`environment`                  | 无                                           | `environments:delete`                  |
-| `list_config`        | `project`、`environment`                  | `prefix`、`keys`                             | `config:read`                          |
-| `get_config`         | `project`、`environment`、`key`           | 无                                           | `config:read`                          |
-| `set_config`         | `project`、`environment`、`key`、`value`  | `description`、`new_key`、`secret`           | `config:write`                         |
-| `set_configs`        | `project`、`environment`、`items`         | —                                            | `config:write`                         |
-| `delete_config`      | `project`、`environment`、`key`           | 无                                           | `config:delete`                        |
-| `list_proposals`     | `project`                                 | `status`（`pending`、`applied`、`rejected`） | `proposals:read`                       |
-| `propose_config`     | `project`、`environment`、`key`、`action` | `value`（`set` 时必填）、`reason`、`secret`  | `proposals:write`                      |
-| `review_proposal`    | `project`、`id`、`approve`                | 无                                           | `proposals:review`                     |
-| `list_keys`          | 无                                        | `project`                                    | `keys:read`                            |
-| `create_key`         | `name`、`scopes`                          | `expires_at`（RFC 3339）                     | `keys:write`                           |
-| `update_key`         | `id`、`name`、`scopes`                    | 无                                           | `keys:write`                           |
-| `rotate_key`         | `id`                                      | 无                                           | `keys:write`                           |
-| `delete_key`         | `id`                                      | 无                                           | `keys:write`                           |
-| `list_users`         | 无                                        | 无                                           | `*` 的 `users:read`                    |
-| `update_user_role`   | `id`、`role`（`user` 或 `admin`）         | 无                                           | `*` 的 `users:write`                   |
-| `delete_user`        | `id`                                      | 无                                           | `*` 的 `users:delete`                  |
-| `get_settings`       | 无                                        | 无                                           | `*` 的 `settings:read`                 |
-| `update_settings`    | `allow_registration`                      | 无                                           | `*` 的 `settings:write`                |
-| `get_project`        | `project`                                 | 无                                           | `projects:read` 与 `environments:read` |
-| `list_values`        | `project`、`environment`                  | `prefix`、`keys`                             | `config:read`                          |
+| 工具                      | 必填参数                                  | 可选参数                                     | scope                                  |
+| ------------------------- | ----------------------------------------- | -------------------------------------------- | -------------------------------------- |
+| `get_identity`            | 无                                        | 无                                           | 已认证                                 |
+| `get_key_scopes`          | 无                                        | 无                                           | 已认证                                 |
+| `list_projects`           | 无                                        | `view`（`mine` 对浏览器和 OAuth 有效）       | `projects:read`                        |
+| `create_project`          | `slug`、`name`                            | `description`                                | `*` 的 `projects:write`                |
+| `update_project`          | `project`、`name`                         | `description`                                | `projects:write`                       |
+| `delete_project`          | `project`                                 | 无                                           | `projects:delete`                      |
+| `list_environments`       | `project`                                 | 无                                           | `environments:read`                    |
+| `create_environment`      | `project`、`slug`、`name`                 | 无                                           | `environments:write`                   |
+| `rename_environment`      | `project`、`environment`、`slug`、`name`  | 无                                           | `environments:write`                   |
+| `set_primary_environment` | `project`、`environment`                  | 无                                           | `environments:write`                   |
+| `delete_environment`      | `project`、`environment`                  | 无                                           | `environments:delete`                  |
+| `list_config`             | `project`、`environment`                  | `prefix`、`keys`                             | `config:read`                          |
+| `get_config`              | `project`、`environment`、`key`           | 无                                           | `config:read`                          |
+| `set_config`              | `project`、`environment`、`key`、`value`  | `description`、`new_key`、`secret`           | `config:write`                         |
+| `set_configs`             | `project`、`environment`、`items`         | —                                            | `config:write`                         |
+| `delete_config`           | `project`、`environment`、`key`           | 无                                           | `config:delete`                        |
+| `list_proposals`          | `project`                                 | `status`（`pending`、`applied`、`rejected`） | `proposals:read`                       |
+| `propose_config`          | `project`、`environment`、`key`、`action` | `value`（`set` 时必填）、`reason`、`secret`  | `proposals:write`                      |
+| `review_proposal`         | `project`、`id`、`approve`                | 无                                           | `proposals:review`                     |
+| `list_keys`               | 无                                        | `project`                                    | `keys:read`                            |
+| `create_key`              | `name`、`scopes`                          | `expires_at`（RFC 3339）                     | `keys:write`                           |
+| `update_key`              | `id`、`name`、`scopes`                    | 无                                           | `keys:write`                           |
+| `rotate_key`              | `id`                                      | 无                                           | `keys:write`                           |
+| `delete_key`              | `id`                                      | 无                                           | `keys:write`                           |
+| `list_users`              | 无                                        | 无                                           | `*` 的 `users:read`                    |
+| `update_user_role`        | `id`、`role`（`user` 或 `admin`）         | 无                                           | `*` 的 `users:write`                   |
+| `delete_user`             | `id`                                      | 无                                           | `*` 的 `users:delete`                  |
+| `get_settings`            | 无                                        | 无                                           | `*` 的 `settings:read`                 |
+| `update_settings`         | `allow_registration`                      | 无                                           | `*` 的 `settings:write`                |
+| `get_project`             | `project`                                 | 无                                           | `projects:read` 与 `environments:read` |
+| `list_values`             | `project`、`environment`                  | `prefix`、`keys`                             | `config:read`                          |
 
 工具执行与 HTTP API 使用同一套处理逻辑和权限检查。创建项目会自动创建 `production` 环境。删除项目或环境会级联清理其内容。Key 管理只能授予或操作自身 scope 覆盖的权限，不能通过创建、编辑或轮换扩大权限。用户不能通过自己的会话或 Key 删除自己的账号或将自己降级；删除其他用户会撤销其会话和 Key，并将项目转交给调用者账号。
 
@@ -238,3 +240,5 @@ curl --fail-with-body --silent --show-error \
 | 工具权限不足、资源不存在、业务校验失败或并发冲突 | HTTP 200，`result.isError = true`；`structuredContent.error` 描述错误，`http_status` 为对应的 400、403、404、409 等状态 |
 
 服务端内部故障只返回通用错误。为调用设置超时，保留请求 ID 匹配响应；不要把密钥、配置值或提案内容写入诊断日志。认证和参数错误需先修正请求再重试。
+
+`rename_environment` 修改环境显示名称和标识；修改标识会使旧业务连接失效。`set_primary_environment` 设置项目页面默认打开的环境，`list_environments` 返回的 `is_primary` 标记该环境。删除主环境前须先设置另一个主环境，删除环境会清理全部配置和提案。系统项目的 `production` 环境不能修改标识或删除。

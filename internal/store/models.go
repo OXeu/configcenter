@@ -49,13 +49,14 @@ type Session struct {
 
 // Project is the isolation boundary for every configuration item.
 type Project struct {
-	OwnerID     uint   `gorm:"index;not null;default:0"`
-	ID          uint   `gorm:"primaryKey"`
-	Slug        string `gorm:"uniqueIndex;size:64;not null"`
-	Name        string `gorm:"not null"`
-	Description string
-	CreatedAt   time.Time `gorm:"not null"`
-	UpdatedAt   time.Time `gorm:"not null"`
+	PrimaryEnvironmentID uint   `gorm:"not null;default:0"`
+	OwnerID              uint   `gorm:"index;not null;default:0"`
+	ID                   uint   `gorm:"primaryKey"`
+	Slug                 string `gorm:"uniqueIndex;size:64;not null"`
+	Name                 string `gorm:"not null"`
+	Description          string
+	CreatedAt            time.Time `gorm:"not null"`
+	UpdatedAt            time.Time `gorm:"not null"`
 }
 
 // Environment is a named deployment target inside a project.

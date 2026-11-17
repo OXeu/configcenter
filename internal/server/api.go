@@ -71,8 +71,8 @@ func (s *Server) fail(c *gin.Context, err error) {
 	case errors.Is(err, store.ErrSystemEnvironment):
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": s.translator(c).T("environments.systemProtected")})
 		return
-	case errors.Is(err, store.ErrLastEnvironment):
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": s.translator(c).T("environments.lastProtected")})
+	case errors.Is(err, store.ErrPrimaryEnvironment):
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": s.translator(c).T("environments.primaryProtected")})
 		return
 	case errors.Is(err, store.ErrKeyChanged), errors.Is(err, gorm.ErrDuplicatedKey):
 		status = http.StatusConflict
@@ -110,12 +110,13 @@ func toProjectJSON(p store.Project) projectJSON {
 }
 
 type envJSON struct {
-	Slug string `json:"slug"`
-	Name string `json:"name"`
+	Slug      string `json:"slug"`
+	Name      string `json:"name"`
+	IsPrimary bool   `json:"is_primary"`
 }
 
-func toEnvJSON(e store.Environment) envJSON {
-	return envJSON{Slug: e.Slug, Name: e.Name}
+func toEnvJSON(e store.Environment, primaryID uint) envJSON {
+	return envJSON{Slug: e.Slug, Name: e.Name, IsPrimary: e.ID == primaryID}
 }
 
 type itemJSON struct {
@@ -241,7 +242,7 @@ func (s *Server) apiListEnvironments(c *gin.Context, project store.Project) {
 	}
 	out := make([]envJSON, 0, len(envs))
 	for _, e := range envs {
-		out = append(out, toEnvJSON(e))
+		out = append(out, toEnvJSON(e, project.PrimaryEnvironmentID))
 	}
 	c.JSON(http.StatusOK, gin.H{"environments": out})
 }
@@ -263,7 +264,10 @@ func (s *Server) apiCreateEnvironment(c *gin.Context, project store.Project) {
 		s.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, toEnvJSON(created))
+	if project.PrimaryEnvironmentID == 0 {
+		project.PrimaryEnvironmentID = created.ID
+	}
+	c.JSON(http.StatusCreated, toEnvJSON(created, project.PrimaryEnvironmentID))
 }
 
 func (s *Server) apiDeleteEnvironment(c *gin.Context, project store.Project) {
@@ -397,7 +401,7 @@ func (s *Server) apiProgrammaticProject(c *gin.Context) {
 	}
 	out := make([]envJSON, 0, len(envs))
 	for _, e := range envs {
-		out = append(out, toEnvJSON(e))
+		out = append(out, toEnvJSON(e, id.Project.PrimaryEnvironmentID))
 	}
 	c.JSON(http.StatusOK, gin.H{"project": toProjectJSON(*id.Project), "environments": out})
 }

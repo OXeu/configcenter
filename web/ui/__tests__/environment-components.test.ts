@@ -28,8 +28,8 @@ const data: PageData = {
 const fetchMock = vi.fn()
 beforeEach(() => {
   let environments = [
-    { slug: 'production', name: 'Production' },
-    { slug: 'staging', name: 'Staging' },
+    { slug: 'production', name: 'Production', is_primary: true },
+    { slug: 'staging', name: 'Staging', is_primary: false },
   ]
   vi.stubGlobal('fetch', fetchMock)
   fetchMock.mockReset().mockImplementation(async (url: string, init: RequestInit) => {
@@ -37,6 +37,12 @@ beforeEach(() => {
     if (init.method === 'PATCH') {
       result = JSON.parse(init.body as string) as (typeof environments)[number]
       environments = [environments[0], result as (typeof environments)[number]]
+    }
+    if (url.endsWith('/primary')) {
+      environments = environments.map((env) => ({
+        ...env,
+        is_primary: url.endsWith(`/${env.slug}/primary`),
+      }))
     }
     if (init.method === 'DELETE') environments = environments.filter((e) => !url.endsWith(e.slug))
     return { ok: true, status: init.method === 'DELETE' ? 204 : 200, json: async () => result }
@@ -48,9 +54,9 @@ beforeEach(() => {
     this.open = false
   }
 })
-async function render(canWrite = true) {
+async function render(canWrite = true, env = data.env) {
   const wrapper = mount(WorkspacePage, {
-    props: { data: { ...data, canWrite }, page: createPage(data), title: 'Billing' },
+    props: { data: { ...data, canWrite, env }, page: createPage(data), title: 'Billing' },
   })
   await flushPromises()
   await wrapper
@@ -68,7 +74,10 @@ it('confirms environment renaming, preserves cancellation and follows the select
   const wrapper = await render()
   const row = wrapper.findAll('tbody tr')[1]
   expect(row.find('[data-danger-action]').exists()).toBe(false)
-  await row.get('button').trigger('click')
+  await row
+    .findAll('button')
+    .find((b) => b.text() === 'More')!
+    .trigger('click')
   await row.get('[data-danger-action="renameEnvironment"]').trigger('click')
   await settle()
   expect(wrapper.get('dialog').text()).toContain('breaks existing business connections')
@@ -76,7 +85,10 @@ it('confirms environment renaming, preserves cancellation and follows the select
   await wrapper.get('dialog input').setValue('preview')
   await wrapper.get('dialog button[type="button"]').trigger('click')
   expect(fetchMock.mock.calls.some(([, init]) => init.method === 'PATCH')).toBe(false)
-  await row.get('button').trigger('click')
+  await row
+    .findAll('button')
+    .find((b) => b.text() === 'More')!
+    .trigger('click')
   await row.get('[data-danger-action="renameEnvironment"]').trigger('click')
   await settle()
   expect((wrapper.get('dialog input').element as HTMLInputElement).value).toBe('staging')
@@ -97,7 +109,10 @@ it('confirms environment renaming, preserves cancellation and follows the select
 it('confirms deletion and switches away from the deleted environment', async () => {
   const wrapper = await render()
   const row = wrapper.findAll('tbody tr')[1]
-  await row.get('button').trigger('click')
+  await row
+    .findAll('button')
+    .find((b) => b.text() === 'More')!
+    .trigger('click')
   await row.get('[data-danger-action="deleteEnvironment"]').trigger('click')
   await settle()
   expect(wrapper.get('dialog').text()).toContain('all its configuration and proposals')
@@ -112,5 +127,31 @@ it('hides environment mutations without write access', async () => {
   const wrapper = await render(false)
   expect(wrapper.find('tbody button').exists()).toBe(false)
   expect(wrapper.text()).not.toContain('New environment')
+  wrapper.unmount()
+})
+
+it('sets the project primary environment without changing the current selection', async () => {
+  const wrapper = await render(true, 'production')
+  expect(wrapper.findAll('tbody tr')[0].get('.badge').text()).toBe('Primary')
+  expect(wrapper.findAll('tbody tr')[1].find('.badge').exists()).toBe(false)
+  await wrapper
+    .findAll('button')
+    .find((b) => b.text() === 'Set primary')!
+    .trigger('click')
+  await settle()
+  expect(wrapper.get('dialog').text()).toContain('will open by default')
+  expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/primary'))).toBe(false)
+  await wrapper.get('dialog form').trigger('submit')
+  await settle()
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/v1/projects/billing/environments/staging/primary',
+    expect.objectContaining({
+      method: 'POST',
+      headers: expect.objectContaining({ 'X-CSRF-Token': 'csrf' }),
+    }),
+  )
+  expect(wrapper.findAll('tbody tr')[1].get('.badge').text()).toBe('Primary')
+  expect(wrapper.findAll('tbody tr')[0].find('.badge').exists()).toBe(false)
+  expect(wrapper.text()).toContain('Environment: production')
   wrapper.unmount()
 })

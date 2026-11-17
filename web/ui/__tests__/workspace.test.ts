@@ -202,3 +202,37 @@ it('validates incomplete scopes before sending a request and permits explicit no
   await w.form.submit()
   expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ name: '', scopes: [] }))
 })
+
+it('falls back to the primary environment when the selected environment no longer exists', async () => {
+  const w = createWorkspace({ ...data, env: 'deleted' }, createPage(data))
+  fetchMock.mockResolvedValueOnce({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      environments: [
+        { slug: 'alpha', name: 'Alpha', is_primary: false },
+        { slug: 'production', name: 'Production', is_primary: true },
+      ],
+    }),
+  })
+  await w.refresh()
+  expect(w.state.env).toBe('production')
+  expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/projects/billing/environments/production/items')
+})
+
+it('retains a valid selected environment even when another environment is primary', async () => {
+  const w = createWorkspace({ ...data, env: 'staging' }, createPage(data))
+  fetchMock.mockResolvedValueOnce({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      environments: [
+        { slug: 'production', name: 'Production', is_primary: true },
+        { slug: 'staging', name: 'Staging', is_primary: false },
+      ],
+    }),
+  })
+  await w.refresh()
+  expect(w.state.env).toBe('staging')
+  expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/projects/billing/environments/staging/items')
+})

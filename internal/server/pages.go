@@ -64,13 +64,20 @@ func (s *Server) projectPage(c *gin.Context) {
 		s.fail(c, store.ErrNotFound)
 		return
 	}
+	env := envs[0]
+	for _, candidate := range envs {
+		if candidate.ID == project.PrimaryEnvironmentID {
+			env = candidate
+			break
+		}
+	}
 	s.render(c, http.StatusOK, gin.H{
 		"Page":     "project",
 		"Title":    project.Name,
 		"Me":       me,
 		"IsAdmin":  me.Role == store.RoleAdmin,
 		"Project":  &project,
-		"Env":      envs[0].Slug,
+		"Env":      env.Slug,
 		"CanWrite": me.Role.CanWrite(),
 	})
 }

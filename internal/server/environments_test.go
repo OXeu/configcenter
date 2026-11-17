@@ -1,7 +1,10 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/OXeu/configcenter/internal/store"
@@ -70,5 +73,72 @@ func TestSystemEnvironmentProtection(t *testing.T) {
 	}
 	if status, _ := f.do(http.MethodGet, "/api/v1/settings", nil); status != http.StatusOK {
 		t.Fatal("settings unavailable", status)
+	}
+}
+
+func TestPrimaryEnvironmentPageAndPermissions(t *testing.T) {
+	f := newFlows(t)
+	createKeyProject(t, f, "billing")
+	createKeyProject(t, f, "other")
+	base := "/api/v1/projects/billing/environments"
+	token, _ := issueKey(t, f, "/api/v1/keys", scopeBody("manager", keyScopeJSON{Project: "billing", Permissions: []store.Permission{store.EnvironmentsRead, store.EnvironmentsWrite, store.EnvironmentsDelete}}))
+	reader, _ := issueKey(t, f, "/api/v1/keys", scopeBody("reader", keyScopeJSON{Project: "billing", Permissions: []store.Permission{store.EnvironmentsRead}}))
+	keyRequest(t, f.router, token, http.MethodPost, base, map[string]string{"slug": "alpha", "name": "Alpha"}, http.StatusCreated)
+	assertPageEnvironment(t, f, "production")
+	keyRequest(t, f.router, reader, http.MethodPost, base+"/alpha/primary", nil, http.StatusForbidden)
+	keyRequest(t, f.router, token, http.MethodPost, "/api/v1/projects/other/environments/production/primary", nil, http.StatusForbidden)
+	keyRequest(t, f.router, token, http.MethodPost, base+"/missing/primary", nil, http.StatusNotFound)
+	for range 2 {
+		keyRequest(t, f.router, token, http.MethodPost, base+"/alpha/primary", nil, http.StatusOK)
+	}
+	assertPageEnvironment(t, f, "alpha")
+	response := keyRequest(t, f.router, token, http.MethodGet, base, nil, http.StatusOK)
+	var list struct {
+		Environments []envJSON `json:"environments"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Environments) != 2 || !list.Environments[0].IsPrimary || list.Environments[1].IsPrimary {
+		t.Fatal("primary flags incorrect", list)
+	}
+	keyRequest(t, f.router, token, http.MethodDelete, base+"/alpha", nil, http.StatusUnprocessableEntity)
+	keyRequest(t, f.router, token, http.MethodPatch, base+"/alpha", map[string]string{"slug": "preview", "name": "Preview"}, http.StatusOK)
+	keyRequest(t, f.router, token, http.MethodPost, base, map[string]string{"slug": "aardvark", "name": "First alphabetically"}, http.StatusCreated)
+	assertPageEnvironment(t, f, "preview")
+	keyRequest(t, f.router, token, http.MethodDelete, base+"/production", nil, http.StatusNoContent)
+	assertPageEnvironment(t, f, "preview")
+	f.csrf = ""
+	if status, _ := f.do(http.MethodPost, base+"/aardvark/primary", nil); status != http.StatusForbidden {
+		t.Fatal("missing CSRF accepted", status)
+	}
+	assertPageEnvironment(t, f, "preview")
+}
+
+func assertPageEnvironment(t *testing.T, f *flows, expected string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/projects/billing", http.NoBody)
+	req.Header.Set("Cookie", "cc_session="+f.cookies["cc_session"].Value)
+	response := httptest.NewRecorder()
+	f.router.ServeHTTP(response, req)
+	if response.Code != http.StatusOK {
+		t.Fatal("project page unavailable", response.Code)
+	}
+	_, tail, found := strings.Cut(response.Body.String(), `<script id="page-data" type="application/json">`)
+	if !found {
+		t.Fatal("missing page data")
+	}
+	raw, _, found := strings.Cut(tail, "</script>")
+	if !found {
+		t.Fatal("invalid page data")
+	}
+	var page struct {
+		Env string `json:"env"`
+	}
+	if err := json.Unmarshal([]byte(raw), &page); err != nil {
+		t.Fatal(err)
+	}
+	if page.Env != expected {
+		t.Fatalf("default environment = %q, want %q", page.Env, expected)
 	}
 }

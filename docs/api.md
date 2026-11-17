@@ -144,6 +144,7 @@ curl --fail-with-body --silent --show-error --get \
 | GET    | `/api/v1/projects/:project/environments`                 | `environments:read`                                                                                           |
 | POST   | `/api/v1/projects/:project/environments`                 | `environments:write`；`slug`、`name`                                                                          |
 | PATCH  | `/api/v1/projects/:project/environments/:env`            | `environments:write`；`slug`、`name` 必填；修改标识会使旧连接失效                                             |
+| POST   | `/api/v1/projects/:project/environments/:env/primary`    | `environments:write`；设置项目主环境                                                                          |
 | DELETE | `/api/v1/projects/:project/environments/:env`            | `environments:delete`                                                                                         |
 | GET    | `/api/v1/projects/:project/environments/:env/items`      | `config:read`；可选 `?prefix=`                                                                                |
 | GET    | `/api/v1/projects/:project/environments/:env/items/:key` | `config:read`；读取单个配置项                                                                                 |
@@ -214,4 +215,6 @@ API Key 查询 scope 选项时，`projects` 只包含具有 `projects:read` 的�
 
 以上全部 API 都可通过统一 [MCP 接口](/docs/mcp) 调用，权限和业务行为保持一致。
 
-环境管理支持修改显示名称和连接标识。修改标识后，旧标识立即失效，配置及提案仍归属原环境。删除环境会同时删除其配置和提案；项目至少保留一个环境，系统项目的 `production` 环境不能修改标识或删除。浏览器中的改名和删除均需通过「更多」菜单确认。
+环境管理支持修改显示名称和连接标识。修改标识后，旧标识立即失效，配置及提案仍归属原环境。删除环境会同时删除其配置和提案；删除主环境前需先指定另一个主环境，系统项目的 `production` 环境不能修改标识或删除。浏览器中的改名和删除均需通过「更多」菜单确认。
+
+环境列表的 `is_primary` 表示项目主环境，打开项目时默认进入该环境。新项目的主环境为 `production`；已有项目升级时优先选择 `production`，不存在时选择最早创建的环境。选择以环境 ID 保存，改名和新增环境不会改变主环境。该设置只影响默认打开的页面，不改变 SDK 或 API 显式指定的环境。
