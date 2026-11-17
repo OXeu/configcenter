@@ -119,7 +119,7 @@ func (s *Server) apiOperations() []apiOperation {
 
 func (op apiOperation) allowed(id auth.Identity) bool {
 	if id.APIKey == nil {
-		if id.User == nil || op.Agent {
+		if id.User == nil || (op.Agent && !id.MCP) {
 			return false
 		}
 		for _, permission := range op.Permissions {

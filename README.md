@@ -89,7 +89,9 @@ Project and key management accept a browser session with `X-CSRF-Token` on mutat
 
 See the [MCP guide](docs/mcp.md) for authentication, initialization, all 28 tools, examples and errors.
 
-`POST /mcp` speaks JSON-RPC 2.0 over stateless HTTP POST with JSON responses. Authenticate with `Authorization: Bearer <token>`; project operations take an explicit `project` argument. API keys may manage multiple projects with independent scopes. Browser sessions can call management tools with their CSRF token and account permissions.
+`POST /mcp` speaks JSON-RPC 2.0 over stateless HTTP POST with JSON responses. Authenticate with `Authorization: Bearer <token>`; project operations take an explicit `project` argument. API keys may manage multiple projects with independent scopes. Browser sessions can call management tools with their CSRF token and account permissions. The former `ApiKey` authorization scheme is no longer accepted.
+
+MCP also supports OAuth login through the configured identity provider, with discovery, dynamic public client registration, explicit user consent, S256 PKCE, rotating refresh tokens and revocation. Configure the existing `CC_OAUTH_*` settings and a public HTTPS `CC_PUBLIC_URL`, then select OAuth in the MCP client. OAuth tokens are restricted to `/mcp` and follow the account’s current permissions.
 
 MCP exposes every API operation: project and environment management, configuration reads and writes, proposals and reviews, key lifecycle, user administration, settings and identity. REST and MCP share operation definitions and handlers. Discovery filters tools by granted scopes, and execution validates permissions for the actual target. User and settings scopes require the `*` project range. Results include JSON text and `structuredContent` with the API response and `http_status`.
 

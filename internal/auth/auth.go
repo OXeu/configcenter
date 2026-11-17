@@ -19,9 +19,10 @@ import (
 
 // Authenticator resolves browser sessions and API keys.
 type Authenticator struct {
-	store Store
-	ttl   time.Duration
-	now   func() time.Time
+	store  Store
+	secure bool
+	ttl    time.Duration
+	now    func() time.Time
 }
 
 const (
@@ -39,6 +40,7 @@ type Store interface {
 	ProjectByID(ctx context.Context, id uint) (store.Project, error)
 	APIKeyByDigest(ctx context.Context, digest [32]byte) (store.APIKey, error)
 	TouchAPIKey(ctx context.Context, id uint)
+	MCPTokenUser(ctx context.Context, digest, resource string, now time.Time) (store.User, error)
 }
 
 // Config is the upstream identity provider configuration.
@@ -62,6 +64,7 @@ type Identity struct {
 	APIKey  *store.APIKey
 	Project *store.Project
 	Role    store.Role
+	MCP     bool
 }
 
 // CanWrite reports whether the principal may change configuration.
@@ -70,11 +73,12 @@ func (i Identity) CanWrite() bool {
 }
 
 // New builds an Authenticator.
-func New(s Store, ttl time.Duration) *Authenticator {
+func New(s Store, ttl time.Duration, secure bool) *Authenticator {
 	return &Authenticator{
-		store: s,
-		ttl:   ttl,
-		now:   func() time.Time { return time.Now().UTC() },
+		store:  s,
+		secure: secure,
+		ttl:    ttl,
+		now:    func() time.Time { return time.Now().UTC() },
 	}
 }
 
@@ -150,6 +154,10 @@ func RequireAdmin() gin.HandlerFunc {
 // same routes, so every page and JSON call behind it behaves alike.
 func (a *Authenticator) BrowserMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if id, ok := FromContext(c.Request.Context()); ok && id.MCP {
+			c.Next()
+			return
+		}
 		if c.GetHeader("Authorization") != "" && (strings.HasPrefix(c.Request.URL.Path, "/api/") || c.Request.URL.Path == "/mcp") {
 			c.Next()
 			return
@@ -193,6 +201,10 @@ func subtleCompare(a, b string) error {
 // from the query parameter or the key's single project scope.
 func (a *Authenticator) BearerMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if id, ok := FromContext(c.Request.Context()); ok && id.MCP && id.User != nil {
+			a.mcpProject(c, id)
+			return
+		}
 		key, ok := a.requestKey(c)
 		if !ok {
 			return
@@ -256,7 +268,7 @@ func (a *Authenticator) Login(c *gin.Context, userID uint) error {
 		Value:    id,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   c.Request.TLS != nil,
+		Secure:   a.secure || c.Request.TLS != nil,
 		SameSite: http.SameSiteLaxMode,
 		Expires:  sess.ExpiresAt,
 	})

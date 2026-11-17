@@ -38,6 +38,7 @@ func Open(ctx context.Context, dialector gorm.Dialector, adminEmail, adminName s
 	}
 	if err := db.WithContext(ctx).AutoMigrate(
 		&User{}, &Session{}, &Project{}, &Environment{}, &ConfigItem{}, &APIKey{}, &MCPProposal{},
+		&MCPClient{}, &MCPAuthorization{}, &MCPGrant{}, &MCPToken{},
 	); err != nil {
 		return nil, fmt.Errorf("migrate schema: %w", err)
 	}

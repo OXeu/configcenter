@@ -22,4 +22,4 @@
 
 每把 Key 都可独立配置项目、环境、配置、提案和密钥管理的操作权限。普通用户只能授权自己的项目，管理员可配置 `*` 范围。通过 [HTTP API](/docs/api) 或页面编辑 scope，无需更换 token。
 
-需要修改配置时使用管理界面；Agent 自动化可使用 [MCP 接口](/docs/mcp) `POST /mcp`，携带同样的 `Authorization: Bearer <token>`。MCP 是 JSON-RPC 2.0，覆盖完整 API，包括项目、环境、配置、Key、用户、系统设置和提案审核；每次调用通过参数选择项目，操作受 scope 限制。不要向只读 REST 路径发送 PUT 或 POST。
+需要修改配置时使用管理界面；Agent 自动化可使用 [MCP 接口](/docs/mcp) `POST /mcp`，携带同样的 `Authorization: Bearer <token>`。MCP 也支持通过现有身份提供商进行 OAuth 授权登录，配置与流程见 [MCP 文档](/docs/mcp)。MCP 是 JSON-RPC 2.0，覆盖完整 API，包括项目、环境、配置、Key、用户、系统设置和提案审核；每次调用通过参数选择项目，操作受 scope 限制。不要向只读 REST 路径发送 PUT 或 POST。

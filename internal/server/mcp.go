@@ -49,8 +49,13 @@ func (s *Server) MountMCP(r *gin.Engine) {
 	s.mcpAPI.UnescapePathValues = true
 	s.mcpAPI.Use(s.authenticator.BrowserMiddleware())
 	s.MountAPI(s.mcpAPI)
-	r.POST("/mcp", s.mcpOrigin, s.authenticator.ManagementMiddleware(), s.mcpHandle)
-	r.Match([]string{http.MethodGet, http.MethodDelete}, "/mcp", s.mcpOrigin, func(c *gin.Context) {
+	metadataURL := ""
+	if s.oauth != nil {
+		metadataURL = s.cfg.PublicURL + "/.well-known/oauth-protected-resource/mcp"
+	}
+	middleware := s.authenticator.MCPMiddleware(s.cfg.PublicURL+"/mcp", metadataURL)
+	r.POST("/mcp", s.mcpOrigin, middleware, s.mcpHandle)
+	r.Match([]string{http.MethodGet, http.MethodDelete}, "/mcp", s.mcpOrigin, middleware, func(c *gin.Context) {
 		c.Header("Allow", http.MethodPost)
 		c.Status(http.StatusMethodNotAllowed)
 	})

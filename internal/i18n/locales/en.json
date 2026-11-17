@@ -143,5 +143,13 @@
   "scope.users:write": "Change user roles",
   "scope.users:delete": "Delete users",
   "scope.settings:read": "Read system settings",
-  "scope.settings:write": "Change system settings"
+  "scope.settings:write": "Change system settings",
+  "oauth.title": "Authorize MCP access",
+  "oauth.client": "{{ClientName}} requests access",
+  "oauth.permissions": "Allow this client to use ConfigCenter on your behalf, including reading and changing configuration, managing projects and API keys, and approving proposals. Administrators also grant user and system settings management. Access follows your current account permissions.",
+  "oauth.account": "Account",
+  "oauth.resource": "Resource",
+  "oauth.redirect": "Client callback address",
+  "oauth.allow": "Authorize",
+  "oauth.deny": "Deny"
 }

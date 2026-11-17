@@ -11,8 +11,8 @@
 ```json
 {
   "items": [
-    {"key": "feature.enabled", "value": "false"},
-    {"key": "db.pool", "value": "10", "description": "连接池大小"}
+    { "key": "feature.enabled", "value": "false" },
+    { "key": "db.pool", "value": "10", "description": "连接池大小" }
   ]
 }
 ```
@@ -23,7 +23,7 @@ MCP 的 `list_config` 和 `list_values` 接受 `keys` 字符串数组，`set_con
 
 ## 认证与 scope
 
-请求携带 `Authorization: Bearer cc_…`。所有 API Key 使用 scope 权限模型。
+请求携带 `Authorization: Bearer cc_…`。所有 API Key 使用 scope 权限模型。旧的 `ApiKey` 鉴权 scheme 不再接受，已有 Key 的值无需更换。MCP 的 OAuth 访问令牌仅用于 `/mcp`，不能直接调用这里的 REST API。
 
 每把 Key 的 `scopes` 是一组“项目范围 + 操作权限”。同一把 Key 可以只读取项目 A，同时写入项目 B；`project: "*"` 表示所有项目（包括以后创建的项目）。权限需要逐项授权，写入不自动包含读取或删除。
 

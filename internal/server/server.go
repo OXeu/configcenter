@@ -74,7 +74,7 @@ func newServer(ctx context.Context, cfg config.Config, log *slog.Logger) (*Serve
 	s := &Server{
 		cfg:           cfg,
 		store:         st,
-		authenticator: auth.New(st, cfg.SessionTTL),
+		authenticator: auth.New(st, cfg.SessionTTL, strings.HasPrefix(cfg.PublicURL, "https://")),
 		oauth:         provider,
 		groupPolicy:   cfg.Groups,
 		catalog:       catalog,
@@ -183,7 +183,7 @@ func (s *Server) render(c *gin.Context, status int, data gin.H) {
 		"canWrite": loggedIn && id.User != nil && id.User.Role.CanWrite(), "languageLabel": label,
 		"messages": s.catalog.Messages(s.translator(c).Lang()), "flash": nil,
 	}
-	for _, key := range []string{"Page", "Env", "CanWrite", "DocPage"} {
+	for _, key := range []string{"Page", "Env", "CanWrite", "DocPage", "Consent"} {
 		if value, ok := withCommon[key]; ok {
 			payload[strings.ToLower(key[:1])+key[1:]] = value
 		}
@@ -259,6 +259,7 @@ func (s *Server) router() *gin.Engine {
 		c.Status(http.StatusNotFound)
 	})
 
+	s.mountMCPOAuth(r)
 	r.Use(s.authenticator.BrowserMiddleware())
 	r.Use(s.languageMiddleware())
 

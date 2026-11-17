@@ -41,6 +41,10 @@ func (a *Authenticator) requestKey(c *gin.Context) (store.APIKey, bool) {
 // ManagementMiddleware resolves a browser user or an API key before scope checks.
 func (a *Authenticator) ManagementMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if id, ok := FromContext(c.Request.Context()); ok && id.MCP && id.User != nil {
+			c.Next()
+			return
+		}
 		if c.GetHeader("Authorization") == "" {
 			RequireUser()(c)
 			return
@@ -50,6 +54,7 @@ func (a *Authenticator) ManagementMiddleware() gin.HandlerFunc {
 			return
 		}
 		a.store.TouchAPIKey(c.Request.Context(), key.ID)
+		c.Writer.Header().Del("WWW-Authenticate")
 		c.Request = c.Request.WithContext(WithIdentity(c.Request.Context(), Identity{APIKey: &key}))
 		c.Next()
 	}

@@ -15,11 +15,54 @@ MCP-Protocol-Version: 2025-06-18
 
 API Key 的每项 scope 绑定项目与操作权限，`project: "*"` 覆盖所有项目（包括未来创建的项目）。用户管理和系统设置权限只能配置在 `*` 范围。权限逐项授权，写入不自动包含读取或删除。完整权限表和 Key 创建方式见 [HTTP API](/docs/api)。
 
-浏览器会话也可调用管理工具，每次 POST 必须携带 `X-CSRF-Token`。普通用户只能管理自己的项目和 Key；用户管理、系统设置需要管理员身份。`get_project` 与 `list_values` 对应 SDK 接口，要求 API Key。显式提供 Authorization 后不会回退到浏览器会话。外部 Agent 使用 API Key，不需要 Cookie 或 CSRF Token。
+浏览器会话也可调用管理工具，每次 POST 必须携带 `X-CSRF-Token`。普通用户只能管理自己的项目和 Key；用户管理、系统设置需要管理员身份。`get_project` 与 `list_values` 对应 SDK 接口，要求 API Key 或 MCP OAuth 令牌。显式提供 Authorization 后不会回退到浏览器会话。外部 Agent 可使用 API Key 或下述 OAuth 登录，不需要 Cookie 或 CSRF Token。旧的 `Authorization: ApiKey …` 已不再接受，现有 Key 的值无需更换。
+
+## OAuth 授权登录
+
+配置现有的 `CC_OAUTH_ISSUER`、`CC_OAUTH_CLIENT_ID`、`CC_OAUTH_CLIENT_SECRET` 后，MCP OAuth 自动启用；上游身份提供商的回调仍为 `CC_PUBLIC_URL/oauth/callback`。`CC_PUBLIC_URL` 必须是客户端可访问的站点地址，正式环境使用 HTTPS。反向代理部署时也应配置公开的 HTTPS 地址。无需在上游身份提供商为每个 MCP 客户端单独创建应用。
+
+在支持 OAuth 的 MCP 客户端添加 `https://你的域名/mcp` 并选择 OAuth 授权。未登录时，客户端会打开现有身份提供商的登录页；随后 ConfigCenter 显示客户端名称、回调地址、授权账号和权限说明，用户允许后才签发授权码。已登录的用户也必须为每次授权明确确认，拒绝会返回 `access_denied`。
+
+实现依据 [MCP 2025-06-18 授权规范](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)，提供以下端点：
+
+| 端点                                            | 用途                                                     |
+| ----------------------------------------------- | -------------------------------------------------------- |
+| `GET /.well-known/oauth-protected-resource/mcp` | 受保护资源及授权服务器发现；无 `/mcp` 后缀的地址也可使用 |
+| `GET /.well-known/oauth-authorization-server`   | 授权、注册、令牌和撤销端点及能力声明                     |
+| `POST /oauth/register`                          | 动态注册 public client，返回 `client_id`                 |
+| `GET /oauth/authorize`                          | 登录与用户授权，支持 `response_type=code`                |
+| `POST /oauth/token`                             | 授权码换取令牌，或刷新令牌                               |
+| `POST /oauth/revoke`                            | 撤销一组授权的全部访问与刷新令牌                         |
+
+未认证的 `/mcp` 请求返回 HTTP 401，并在 `WWW-Authenticate: Bearer` 中给出 `resource_metadata` 和 `scope="mcp"`。发现文档与端点地址使用配置的 `CC_PUBLIC_URL`，不使用请求中的 Host。
+
+客户端注册请求为 JSON，例如：
+
+```json
+{
+  "client_name": "My MCP client",
+  "redirect_uris": ["http://127.0.0.1:4567/callback"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none"
+}
+```
+
+支持无客户端密钥的 public client。回调地址必须为 HTTPS，或 `localhost`、`127.0.0.1`、`[::1]` 的 HTTP 地址；授权请求必须与注册地址精确匹配，包括端口和查询参数。不支持通配符、fragment、implicit flow、密码授权或 `client_credentials`。
+
+授权请求包含 `client_id`、`redirect_uri`、`response_type=code`、`scope=mcp`、`resource=CC_PUBLIC_URL/mcp`、`code_challenge` 和 `code_challenge_method=S256`。客户端应生成并验证 `state`。授权响应保留 `state`，同时返回 `iss`。PKCE verifier 长度为 43–128，必须由 RFC 7636 允许的字符组成。
+
+令牌端点使用 `application/x-www-form-urlencoded`。授权码兑换参数为 `grant_type=authorization_code`、`client_id`、`code`、`redirect_uri`、`code_verifier` 和相同的 `resource`。刷新时发送 `grant_type=refresh_token`、`client_id`、`refresh_token` 和相同的 `resource`。两者不发送客户端密钥或 HTTP Basic 认证。
+
+访问令牌使用 `Authorization: Bearer <access_token>`，有效期最多 1 小时；仅在注册时声明 `refresh_token` grant 的客户端会收到刷新令牌。授权总有效期为 30 天，每次刷新都替换访问令牌和刷新令牌。重复兑换授权码或使用旧刷新令牌会撤销该授权的全部令牌，客户端应串行刷新，并保存最新的令牌对。授权码有效期为 5 分钟，登录和确认请求有效期为 10 分钟。
+
+撤销时向 `/oauth/revoke` 提交表单 `client_id` 和 `token`（访问令牌或刷新令牌均可）；未知令牌同样返回 HTTP 200。服务端只保存令牌摘要，授权数据保存在现有数据库中。
+
+OAuth 的 `mcp` scope 代表以账号身份访问 MCP：普通用户限于自己的项目和 Key，管理员还可管理用户与系统设置。每次请求重新检查账号当前角色，删除账号或撤销授权会使令牌失效。OAuth 令牌只用于 `/mcp`，不能直接调用 `/api/v1`；上游身份提供商的 access token 或 id token 不能用作 MCP 凭据。需要按项目和具体操作限制客户端时，使用 scope API Key。
 
 ## 连接与初始化
 
-服务采用无状态 HTTP POST，直接返回 JSON。没有 SSE 推送、会话 ID 或 JSON-RPC 批处理；GET 和 DELETE `/mcp` 返回 HTTP 405。协议版本为 `2025-06-18`，显式发送其他 `MCP-Protocol-Version` 返回 HTTP 400。带有 `Origin` 的请求必须匹配 `CC_PUBLIC_URL` 的源，否则返回 HTTP 403。传输和工具结构分别参考 [MCP 传输规范](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) 和 [工具规范](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)。
+服务采用无状态 HTTP POST，直接返回 JSON。没有 SSE 推送、会话 ID 或 JSON-RPC 批处理；GET 和 DELETE `/mcp` 在认证后返回 HTTP 405。协议版本为 `2025-06-18`，显式发送其他 `MCP-Protocol-Version` 返回 HTTP 400。带有 `Origin` 的请求必须匹配 `CC_PUBLIC_URL` 的源，否则返回 HTTP 403。传输和工具结构分别参考 [MCP 传输规范](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) 和 [工具规范](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)。
 
 示例中的 `CC_URL`（无尾部斜杠）和 `CC_KEY` 由调用方安全提供，不是服务端配置项：
 
@@ -70,17 +113,17 @@ curl --fail-with-body --silent --show-error \
 | -------------------- | ----------------------------------------- | -------------------------------------------- | -------------------------------------- |
 | `get_identity`       | 无                                        | 无                                           | 已认证                                 |
 | `get_key_scopes`     | 无                                        | 无                                           | 已认证                                 |
-| `list_projects`      | 无                                        | `view`（`mine` 仅对浏览器有效）              | `projects:read`                        |
+| `list_projects`      | 无                                        | `view`（`mine` 对浏览器和 OAuth 有效）       | `projects:read`                        |
 | `create_project`     | `slug`、`name`                            | `description`                                | `*` 的 `projects:write`                |
 | `update_project`     | `project`、`name`                         | `description`                                | `projects:write`                       |
 | `delete_project`     | `project`                                 | 无                                           | `projects:delete`                      |
 | `list_environments`  | `project`                                 | 无                                           | `environments:read`                    |
 | `create_environment` | `project`、`slug`、`name`                 | 无                                           | `environments:write`                   |
 | `delete_environment` | `project`、`environment`                  | 无                                           | `environments:delete`                  |
-| `list_config`        | `project`、`environment`                  | `prefix`、`keys`                           | `config:read`                          |
+| `list_config`        | `project`、`environment`                  | `prefix`、`keys`                             | `config:read`                          |
 | `get_config`         | `project`、`environment`、`key`           | 无                                           | `config:read`                          |
 | `set_config`         | `project`、`environment`、`key`、`value`  | `description`、`new_key`                     | `config:write`                         |
-| `set_configs`        | `project`、`environment`、`items`          | —                                            | `config:write`                         |
+| `set_configs`        | `project`、`environment`、`items`         | —                                            | `config:write`                         |
 | `delete_config`      | `project`、`environment`、`key`           | 无                                           | `config:delete`                        |
 | `list_proposals`     | `project`                                 | `status`（`pending`、`applied`、`rejected`） | `proposals:read`                       |
 | `propose_config`     | `project`、`environment`、`key`、`action` | `value`（`set` 时必填）、`reason`            | `proposals:write`                      |
@@ -96,7 +139,7 @@ curl --fail-with-body --silent --show-error \
 | `get_settings`       | 无                                        | 无                                           | `*` 的 `settings:read`                 |
 | `update_settings`    | `allow_registration`                      | 无                                           | `*` 的 `settings:write`                |
 | `get_project`        | `project`                                 | 无                                           | `projects:read` 与 `environments:read` |
-| `list_values`        | `project`、`environment`                  | `prefix`、`keys`                           | `config:read`                          |
+| `list_values`        | `project`、`environment`                  | `prefix`、`keys`                             | `config:read`                          |
 
 工具执行与 HTTP API 使用同一套处理逻辑和权限检查。创建项目会自动创建 `production` 环境。删除项目或环境会级联清理其内容。Key 管理只能授予或操作自身 scope 覆盖的权限，不能通过创建、编辑或轮换扩大权限。用户不能通过自己的会话或 Key 删除自己的账号或将自己降级；删除其他用户会撤销其会话和 Key，并将项目转交给调用者账号。
 

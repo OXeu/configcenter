@@ -8,7 +8,8 @@ export type User = {
 }
 
 export type PageData = {
-  page: 'login' | 'projects' | 'project' | 'users' | 'settings' | 'keys' | 'docs'
+  page: 'login' | 'projects' | 'project' | 'users' | 'settings' | 'keys' | 'docs' | 'oauth-consent'
+  consent?: { request: string; clientName: string; redirectUri: string; resource: string }
   docPage?: string
   lang: string
   title: string
@@ -29,4 +30,13 @@ export type PageData = {
   flash: { message: string; level: 'error' | 'success' } | null
 }
 
-export const pages = ['login', 'projects', 'project', 'users', 'settings', 'keys', 'docs']
+export const pages = [
+  'login',
+  'projects',
+  'project',
+  'users',
+  'settings',
+  'keys',
+  'docs',
+  'oauth-consent',
+]

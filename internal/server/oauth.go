@@ -22,6 +22,9 @@ func (s *Server) MountOAuth(r *gin.Engine) {
 	r.GET("/auth/login", s.oauthStart)
 	r.GET("/oauth/callback", s.oauthCallback)
 	r.POST("/logout", s.logout)
+	r.GET("/oauth/authorize", s.mcpAuthorize)
+	r.GET("/oauth/consent", s.mcpConsentPage)
+	r.POST("/oauth/consent", s.mcpConsent)
 }
 
 func (s *Server) loginPage(c *gin.Context) {
@@ -46,6 +49,12 @@ func (s *Server) providerName() string {
 }
 
 func (s *Server) oauthStart(c *gin.Context) {
+	s.startOAuth(c, "")
+}
+
+func (s *Server) startOAuth(c *gin.Context, requestID string) {
+	c.Header("Cache-Control", "no-store")
+	clearCookie(c, mcpLoginCookie, "/oauth")
 	if s.oauth == nil {
 		s.redirectWithError(c, "oauth_disabled")
 		return
@@ -55,12 +64,22 @@ func (s *Server) oauthStart(c *gin.Context) {
 		s.redirectWithError(c, "oauth_unavailable")
 		return
 	}
+	if requestID != "" {
+		if err := s.store.BindMCPLogin(c.Request.Context(), requestID, auth.TokenDigest(stateBlob)); err != nil {
+			s.redirectWithError(c, "oauth_failed")
+			return
+		}
+		http.SetCookie(c.Writer, &http.Cookie{
+			Name: mcpLoginCookie, Value: requestID, Path: "/oauth", HttpOnly: true,
+			Secure: strings.HasPrefix(s.cfg.PublicURL, "https://"), SameSite: http.SameSiteLaxMode, MaxAge: 600,
+		})
+	}
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     oauthStateCookie,
 		Value:    stateBlob,
 		Path:     "/oauth/callback",
 		HttpOnly: true,
-		Secure:   c.Request.TLS != nil,
+		Secure:   c.Request.TLS != nil || strings.HasPrefix(s.cfg.PublicURL, "https://"),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int((10 * time.Minute).Seconds()),
 	})
@@ -68,7 +87,9 @@ func (s *Server) oauthStart(c *gin.Context) {
 }
 
 func (s *Server) oauthCallback(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	clearCookie(c, oauthStateCookie, "/oauth/callback")
+	clearCookie(c, mcpLoginCookie, "/oauth")
 	if s.oauth == nil {
 		s.redirectWithError(c, "oauth_disabled")
 		return
@@ -104,6 +125,14 @@ func (s *Server) oauthCallback(c *gin.Context) {
 	}
 	if err := s.authenticator.Login(c, user.ID); err != nil {
 		s.redirectWithError(c, "session_failed")
+		return
+	}
+	if requestID, cookieErr := c.Cookie(mcpLoginCookie); cookieErr == nil && requestID != "" {
+		if err := s.store.CompleteMCPLogin(c.Request.Context(), requestID, auth.TokenDigest(stateBlob), user.ID, time.Now().UTC()); err != nil {
+			s.redirectWithError(c, "oauth_failed")
+			return
+		}
+		c.Redirect(http.StatusFound, "/oauth/consent?request="+url.QueryEscape(requestID))
 		return
 	}
 	c.Redirect(http.StatusFound, "/projects")
