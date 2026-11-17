@@ -174,4 +174,10 @@ identity provider. The VPC must also permit outbound access to the identity prov
 The selected Tencent action runs serverless-cloud-framework; its source is pinned,
 but its upstream CLI installation is not version-pinned.
 
+SCF uses Beijing time (`TZ=Asia/Shanghai`), 64 MB of memory, static concurrency
+of 100 requests per instance and a one-second request buffer. After deploying,
+the workflow runs `tools/scf-network.py configcenter` with the SCF Python SDK to
+enable and verify fixed intranet egress IPs; the SCF component does not forward
+the `IntranetConfig` API setting. Manual deployments must run this step too.
+
 Changing the driver does not migrate existing SQLite data to MySQL.

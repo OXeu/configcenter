@@ -11,12 +11,19 @@ inputs:
   memorySize: 64
   timeout: 30
   initTimeout: 60
+  instanceConcurrencyConfig:
+    enable: true
+    dynamicEnabled: false
+    maxConcurrency: 100
+  overClockConfig:
+    timeOut: 1
   publicAccess: true
   vpcConfig:
     vpcId: ${env:SCF_VPC_ID}
     subnetId: ${env:SCF_SUBNET_ID}
   environment:
     variables:
+      TZ: Asia/Shanghai
       CC_ADDR: '0.0.0.0:9000'
       CC_DB_DRIVER: mysql
       CC_ENV: production
