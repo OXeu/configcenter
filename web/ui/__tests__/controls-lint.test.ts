@@ -80,6 +80,11 @@ describe('dropdown overlay rules', () => {
     expect(
       checkDropdownStyles('.table-scroll:has(.dropdown-content) { overflow: visible; }'),
     ).toContain('dropdown-no-layout-toggle')
-    expect(checkDropdownStyles(readFileSync('web/ui/theme.css', 'utf8'), true)).toEqual([])
+    expect(
+      checkDropdownStyles(
+        readFileSync('.tmp/common/ui/theme.css', 'utf8') + readFileSync('web/ui/theme.css', 'utf8'),
+        true,
+      ),
+    ).toEqual([])
   })
 })

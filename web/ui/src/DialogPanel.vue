@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch, nextTick, useId } from 'vue'
-import DropdownSelect from './DropdownSelect.vue'
-import CheckboxField from './CheckboxField.vue'
+import DropdownSelect from '@oxeu/center-common/ui/DropdownSelect.vue'
+import CheckboxField from '@oxeu/center-common/ui/CheckboxField.vue'
 const formId = useId()
 const props = defineProps({
   form: { type: Object, required: true },

@@ -3,6 +3,7 @@ module github.com/OXeu/configcenter
 go 1.26.10
 
 require (
+	github.com/OXeu/center-common v0.0.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-sql-driver/mysql v1.8.1
@@ -54,3 +55,5 @@ require (
 	modernc.org/memory v1.5.0 // indirect
 	modernc.org/sqlite v1.23.1 // indirect
 )
+
+replace github.com/OXeu/center-common => ./.tmp/common

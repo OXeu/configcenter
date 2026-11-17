@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test'
 import { mount } from '@vue/test-utils'
-import DropdownSelect from '../src/DropdownSelect.vue'
-import DropdownMenu from '../src/DropdownMenu.vue'
+import DropdownSelect from '@oxeu/center-common/ui/DropdownSelect.vue'
+import DropdownMenu from '@oxeu/center-common/ui/DropdownMenu.vue'
 
 function dropdown() {
   return mount(DropdownSelect, {

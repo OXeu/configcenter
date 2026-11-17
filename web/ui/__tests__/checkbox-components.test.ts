@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test'
 import { mount } from '@vue/test-utils'
-import CheckboxField from '../src/CheckboxField.vue'
+import CheckboxField from '@oxeu/center-common/ui/CheckboxField.vue'
 
 describe('shared checkbox', () => {
   it('exposes its label and checked state without a native checkbox or form submission', async () => {

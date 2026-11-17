@@ -27,21 +27,13 @@ jobs:
           --health-retries=12
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - name: Install Go linter
-        run: |
-          mkdir -p .tmp
-          TMPDIR="$PWD/.tmp" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
-      - run: make check
-      - run: TMPDIR="$PWD/.tmp" go test -tags=mysql ./internal/server -run TestMySQLStore -count=1
-      - run: make build
+      - name: Fetch pinned common infrastructure
+        env:
+          COMMON_REPO_TOKEN: ${{ secrets.COMMON_REPO_TOKEN }}
+          COMMON_REPO_SSH_KEY: ${{ secrets.COMMON_REPO_SSH_KEY }}
+        run: node tools/common.ts --locked
+      - uses: ./.tmp/common/.github/actions/check
+
   deploy:
     needs: check
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.SCF_DEPLOY_ENABLED == 'true'
@@ -57,14 +49,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: mkdir -p .tmp
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
+      - name: Fetch pinned common infrastructure
+        env:
+          COMMON_REPO_TOKEN: ${{ secrets.COMMON_REPO_TOKEN }}
+          COMMON_REPO_SSH_KEY: ${{ secrets.COMMON_REPO_SSH_KEY }}
+        run: node tools/common.ts --locked
+      - uses: ./.tmp/common/.github/actions/setup
       - name: Build Linux deployment package
         run: |
           mkdir -p .tmp/scf

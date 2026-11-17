@@ -1,40 +1,23 @@
-.PHONY: all build assets lint test check sdk-lint sdk-test run fmt
+PROJECT := configcenter
+SDK_DIR := sdk/configcenter
+COMMON_DIR ?= ../center-common
+.DEFAULT_GOAL := all
+.NOTPARALLEL:
+.PHONY: common common-local bootstrap all build assets lint test check sdk-lint sdk-test run fmt scf-package
 
-BIN ?= .tmp/bin/configcenter
-TMP_ROOT := $(CURDIR)/.tmp
-GO_TEST := mkdir -p $(TMP_ROOT) && TMPDIR=$(TMP_ROOT) go test
+common:
+	node tools/common.ts
 
-all: check build
+common-local:
+	node tools/common.ts --local "$(COMMON_DIR)"
 
-build: assets
-	mkdir -p $(TMP_ROOT)/bin
-	TMPDIR=$(TMP_ROOT) go build -o $(BIN) ./cmd/configcenter
+bootstrap: common
+	cd .tmp/common && npm ci
+	npm ci
 
-assets:
-	npm run --silent build
+all build assets lint test check sdk-lint sdk-test run fmt: common
+	$(MAKE) --no-print-directory -f .tmp/common/config/project.mk PROJECT=$(PROJECT) SDK_DIR=$(SDK_DIR) $@
 
-fmt: assets
-	golangci-lint fmt ./...
-	npm run fmt
-
-lint: assets
-	golangci-lint run ./...
-	npm run lint
-	npm run typecheck
-	npm test --silent
-
-test: assets
-	$(GO_TEST) ./...
-
-sdk-lint:
-	cd sdk/configcenter && golangci-lint run ./...
-
-sdk-test:
-	cd sdk/configcenter && $(GO_TEST) ./...
-
-check: assets lint sdk-lint test sdk-test
-
-# The binary loads .env.local itself (CC_ENV_FILE), without overriding
-# variables exported here, so `CC_ADDR=:9000 make run` still works.
-run: build
-	exec ./$(BIN)
+scf-package:
+	node tools/common.ts --locked
+	$(MAKE) --no-print-directory -f .tmp/common/config/project.mk PROJECT=$(PROJECT) SDK_DIR=$(SDK_DIR) $@

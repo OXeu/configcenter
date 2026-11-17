@@ -36,5 +36,8 @@ function check(directory: string): void {
   }
 }
 check('web/ui/src')
-const styleErrors = checkDropdownStyles(readFileSync('web/ui/theme.css', 'utf8'), true)
+const styleErrors = checkDropdownStyles(
+  readFileSync('.tmp/common/ui/theme.css', 'utf8') + readFileSync('web/ui/theme.css', 'utf8'),
+  true,
+)
 if (styleErrors.length) throw new Error(`web/ui/theme.css: ${styleErrors.join(', ')}`)

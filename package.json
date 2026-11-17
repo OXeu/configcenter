@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vp dev",
     "build": "npm run build:docs && vp build && node tools/compress-assets.ts",
-    "lint": "vp lint && node tools/lint-templates.ts",
+    "lint": "node .tmp/common/tools/lint-scripts.ts && vp lint && node tools/lint-templates.ts",
     "fmt": "vp fmt",
     "test": "vp test",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
@@ -13,6 +13,7 @@
     "build:docs": "node tools/build-docs.ts"
   },
   "devDependencies": {
+    "@oxeu/center-common": "file:.tmp/common",
     "@shikijs/transformers": "^4.6.0",
     "@tailwindcss/vite": "^4.3.5",
     "@types/markdown-it": "^14.2.0",
