@@ -2,10 +2,8 @@ package configcenter
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
-	"sort"
 	"strings"
 )
 
@@ -22,31 +20,8 @@ type Sources []DataSource
 // Read merges matching values without treating empty strings as missing.
 // Cancellation aborts the read without returning a partial snapshot.
 func (s Sources) Read(ctx context.Context, prefix string) ([]Item, error) {
-	values := make(map[string]Item)
-	var failures []error
-	for i, source := range s {
-		if err := ctx.Err(); err != nil {
-			return nil, fmt.Errorf("configcenter: read sources: %w", err)
-		}
-		items, err := source.Read(ctx, prefix)
-		if err != nil {
-			failures = append(failures, fmt.Errorf("configcenter: source %d: %w", i, err))
-		}
-		for _, item := range items {
-			if _, exists := values[item.Key]; !exists && strings.HasPrefix(item.Key, prefix) {
-				values[item.Key] = item
-			}
-		}
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("configcenter: read sources: %w", err)
-	}
-	items := make([]Item, 0, len(values))
-	for _, item := range values {
-		items = append(items, item)
-	}
-	sort.Slice(items, func(i, j int) bool { return items[i].Key < items[j].Key })
-	return items, errors.Join(failures...)
+	snapshot, err := LoadSnapshot(ctx, prefix, s...)
+	return snapshot.All(), err
 }
 
 // MapSource supplies in-memory configuration such as application defaults.

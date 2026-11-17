@@ -81,7 +81,7 @@ type Client struct {
 	opMu      sync.Mutex
 	mu        sync.RWMutex
 	cache     memoryCache
-	fallbacks map[string]Item
+	fallbacks Snapshot
 	prefix    string
 }
 
@@ -133,7 +133,6 @@ func newClient(cfg Config, env, endpoint string, client *http.Client) *Client {
 			prefixes: make(map[string]time.Time),
 			ttl:      cfg.CacheTTL,
 		},
-		fallbacks: make(map[string]Item),
 	}
 	var files []string
 	if cfg.DotenvFiles != nil {
@@ -184,26 +183,23 @@ func (c *Client) loadSnapshot(ctx context.Context, prefix string, refresh bool) 
 	c.cache.prune(time.Now())
 	covered := c.cache.covers(prefix)
 	c.mu.Unlock()
-	var remote []Item
+	var remote Snapshot
 	var remoteErr error
 	fetch := !c.IsLocal() && (refresh || !covered)
 	if fetch {
-		remote, remoteErr = (remoteSource{client: c}).Read(ctx, prefix)
+		remote, remoteErr = LoadSnapshot(ctx, prefix, remoteSource{client: c})
 	}
 	fetchedAt := time.Now()
-	fallbacks, fallbackErr := c.sources.Read(ctx, prefix)
+	fallbacks, fallbackErr := LoadSnapshot(ctx, prefix, c.sources...)
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("configcenter: load cancelled: %w", err)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if fetch && remoteErr == nil {
-		c.cache.store(prefix, remote, fetchedAt, refresh)
+		c.cache.store(prefix, remote.All(), fetchedAt, refresh)
 	}
-	c.fallbacks = make(map[string]Item, len(fallbacks))
-	for _, item := range fallbacks {
-		c.fallbacks[item.Key] = item
-	}
+	c.fallbacks = fallbacks
 	c.prefix = prefix
 	return errors.Join(remoteErr, fallbackErr)
 }
@@ -247,8 +243,7 @@ func (c *Client) Get(key string) (string, bool) {
 	if item, ok := c.cache.get(key, time.Now()); ok {
 		return item.Value, true
 	}
-	item, ok := c.fallbacks[key]
-	return item.Value, ok
+	return c.fallbacks.Get(key)
 }
 
 // GetDefault returns the snapshot value of key or fallback.
@@ -281,7 +276,8 @@ func (c *Client) Bool(key string, fallback bool) bool {
 func (c *Client) All() []Item {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	values := maps.Clone(c.fallbacks)
+	values := make(map[string]Item, len(c.fallbacks.items))
+	maps.Copy(values, c.fallbacks.items)
 	now := time.Now()
 	for key := range c.cache.entries {
 		if item, ok := c.cache.get(key, now); ok && strings.HasPrefix(key, c.prefix) {
