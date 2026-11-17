@@ -39,8 +39,8 @@ func TestMCPOAuthDiscovery(t *testing.T) {
 
 func TestMCPOAuthRejectsInvalidClientsAndAuthorization(t *testing.T) {
 	s, router, _ := testServer(t, true)
-	for _, uri := range []string{"http://remote.example/callback", "https://client.example/cb#fragment", "https://client.example/cb#", "javascript:alert(1)", "https://user:pass@client.example/cb", "https://*.example/cb", "//client.example/cb", "http://127.0.0.1.evil.example/cb"} {
-		oauthJSON(t, router, "/oauth/register", map[string]any{"redirect_uris": []string{uri}}, http.StatusBadRequest)
+	for _, redirects := range [][]string{nil, {}, make([]string, 11)} {
+		oauthJSON(t, router, "/oauth/register", map[string]any{"redirect_uris": redirects}, http.StatusBadRequest)
 	}
 	for _, metadata := range []map[string]any{
 		{"token_endpoint_auth_method": "client_secret_basic"},

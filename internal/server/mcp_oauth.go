@@ -86,12 +86,6 @@ func (s *Server) mcpRegister(c *gin.Context) {
 		oauthError(c, http.StatusBadRequest, "invalid_redirect_uri")
 		return
 	}
-	for _, uri := range input.RedirectURIs {
-		if !validMCPRedirect(uri) {
-			oauthError(c, http.StatusBadRequest, "invalid_redirect_uri")
-			return
-		}
-	}
 	if len(input.GrantTypes) == 0 {
 		input.GrantTypes = []string{"authorization_code"}
 	}
@@ -121,17 +115,6 @@ func (s *Server) mcpRegister(c *gin.Context) {
 		"redirect_uris": client.RedirectURIs, "grant_types": input.GrantTypes, "response_types": input.ResponseTypes,
 		"token_endpoint_auth_method": "none", "scope": "mcp",
 	})
-}
-
-func validMCPRedirect(raw string) bool {
-	u, err := url.Parse(raw)
-	if err != nil || len(raw) > 2048 || u.Hostname() == "" || u.User != nil || strings.ContainsAny(raw, "#*\\") || u.Opaque != "" {
-		return false
-	}
-	if raw == "cursor://anysphere.cursor-mcp/oauth/callback" {
-		return true
-	}
-	return u.Scheme == "https" || (u.Scheme == "http" && slices.Contains([]string{"localhost", "127.0.0.1", "::1"}, u.Hostname()))
 }
 
 func oauthError(c *gin.Context, status int, code string) {

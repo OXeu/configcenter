@@ -17,17 +17,7 @@ async function decide(approve: boolean) {
       csrf: props.page.csrf,
       body: { request: props.data.consent.request, approve },
     })) as { redirect: string }
-    const redirect = new URL(result.redirect)
-    const registered = new URL(props.data.consent.redirectUri)
-    if (
-      redirect.protocol !== registered.protocol ||
-      redirect.host !== registered.host ||
-      redirect.pathname !== registered.pathname ||
-      redirect.username !== registered.username ||
-      redirect.password !== registered.password
-    )
-      throw new Error(msg('error.title'))
-    location.assign(redirect.href)
+    location.assign(result.redirect)
   } catch (err) {
     props.page.report(err)
     busy.value = false

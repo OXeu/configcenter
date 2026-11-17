@@ -107,20 +107,14 @@ it('reports failures and allows retry without navigating', async () => {
   wrapper.unmount()
 })
 
-it('rejects a redirect outside the displayed callback', async () => {
-  vi.mocked(fetch).mockResolvedValue(
-    new Response(JSON.stringify({ redirect: 'https://other.example/callback?code=one' })),
-  )
-  const wrapper = consent()
-  await wrapper.get('button').trigger('click')
-  await flushPromises()
-  expect(report).toHaveBeenCalledTimes(1)
-  expect(location.assign).not.toHaveBeenCalled()
-  wrapper.unmount()
-})
-
-it('returns an approved authorization to the registered Cursor callback', async () => {
-  const callback = 'cursor://anysphere.cursor-mcp/oauth/callback'
+it.each([
+  'cursor://anysphere.cursor-mcp/oauth/callback',
+  'other-app://callback/oauth',
+  'com.example.app:oauth/callback',
+  'http://remote.example/callback',
+  '../callback',
+  '//client.example/callback',
+])('uses the server authorization redirect without URI validation: %s', async (callback) => {
   const redirect = `${callback}?code=one&state=state`
   vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ redirect })))
   const wrapper = consent('en', callback)
@@ -128,20 +122,5 @@ it('returns an approved authorization to the registered Cursor callback', async 
   await flushPromises()
   expect(location.assign).toHaveBeenCalledWith(redirect)
   expect(report).not.toHaveBeenCalled()
-  wrapper.unmount()
-})
-
-it.each([
-  'cursor://another-app/oauth/callback?code=one',
-  'other-app://anysphere.cursor-mcp/oauth/callback?code=one',
-  'cursor://anysphere.cursor-mcp/other-command?code=one',
-  'cursor://user@anysphere.cursor-mcp/oauth/callback?code=one',
-])('rejects native callback substitution: %s', async (redirect) => {
-  vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ redirect })))
-  const wrapper = consent('en', 'cursor://anysphere.cursor-mcp/oauth/callback')
-  await wrapper.get('button').trigger('click')
-  await flushPromises()
-  expect(report).toHaveBeenCalledTimes(1)
-  expect(location.assign).not.toHaveBeenCalled()
   wrapper.unmount()
 })

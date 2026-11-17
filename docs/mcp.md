@@ -48,9 +48,11 @@ API Key 的每项 scope 绑定项目与操作权限，`project: "*"` 覆盖所�
 }
 ```
 
-支持无客户端密钥的 public client。回调地址支持 HTTPS、`localhost`/`127.0.0.1`/`[::1]` 的 HTTP 地址，以及 Cursor 的固定原生回调 `cursor://anysphere.cursor-mcp/oauth/callback`；授权请求必须与注册地址精确匹配，包括端口和查询参数。不支持通配符、fragment、implicit flow、密码授权或 `client_credentials`。
+支持无客户端密钥的 public client。注册时按原值保存 `redirect_uris`，不校验 URI 格式、协议、主机、端口、路径、查询参数或 fragment，也不配置客户端回调白名单。`redirect_uris` 仍须是包含 1–10 项的字符串数组，注册请求体上限为 16 KiB。
 
-Cursor 的部分版本会同时注册原生回调、HTTPS 回调和本机 HTTP 回调，服务端保留完整列表，授权时可以选择其中任意一个。原生回调仅允许上述固定地址；其他 scheme、host、路径、端口和附加参数不在允许范围内。若点击认证后出现 `SSE error: Non-200 status code (401)`，应先查看 `/oauth/register` 的响应：`invalid_redirect_uri` 表示回调注册已失败，SSE 401 可能只是客户端回退连接后的错误。
+客户端可注册多个回调，授权时选择其中任意一个。授权请求必须与某个已注册地址精确匹配，兑换授权码时的 `redirect_uri` 必须与该次授权请求一致。用户确认后，页面直接使用服务端返回的回调地址跳转，不再自行解析或校验 URI；回调格式与客户端处理能力由客户端负责。
+
+不支持 implicit flow、密码授权或 `client_credentials`。PKCE、用户确认、CSRF、客户端绑定和资源绑定保持生效。
 
 授权请求包含 `client_id`、`redirect_uri`、`response_type=code`、`scope=mcp`、`resource=CC_PUBLIC_URL/mcp`、`code_challenge` 和 `code_challenge_method=S256`。客户端应生成并验证 `state`。授权响应保留 `state`，同时返回 `iss`。PKCE verifier 长度为 43–128，必须由 RFC 7636 允许的字符组成。
 
