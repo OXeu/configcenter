@@ -6,12 +6,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/OXeu/configcenter/sdk/configcenter"
 )
 
 func TestLoadReadsEnvFileWithoutOverridingExportedValues(t *testing.T) {
 	file := configFile(t, "CC_ADDR=0.0.0.0:9999\nCC_PUBLIC_URL=http://files.example/\nCC_OAUTH_ISSUER=https://auth.xeu.life/\n")
 	before, present := os.LookupEnv("CC_PUBLIC_URL")
-	cfg, err := Load(t.Context(), configLookup(map[string]string{
+	cfg, err := loadLocal(t, configLookup(map[string]string{
 		"CC_ENV_FILE": file,
 		"CC_ADDR":     "127.0.0.1:7777",
 	}))
@@ -36,7 +38,7 @@ func TestLoadReadsEnvFileWithoutOverridingExportedValues(t *testing.T) {
 }
 
 func TestLoadToleratesMissingEnvFile(t *testing.T) {
-	cfg, err := Load(t.Context(), configLookup(map[string]string{
+	cfg, err := loadLocal(t, configLookup(map[string]string{
 		"CC_ENV_FILE": configFile(t, "") + ".absent",
 	}))
 	if err != nil {
@@ -63,7 +65,7 @@ func TestDatabaseDrivers(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			values := map[string]string{"CC_DB_DRIVER": tc.driver, "CC_DB": tc.dsn, "CC_ENV_FILE": "missing-test-env"}
-			cfg, err := Load(t.Context(), configLookup(values))
+			cfg, err := Prepare(t.Context(), configLookup(values))
 			if (err == nil) != tc.valid {
 				t.Fatalf("valid=%v, error=%v", tc.valid, err)
 			}
@@ -103,4 +105,13 @@ func configFile(t *testing.T, contents string) string {
 		t.Fatal(err)
 	}
 	return file
+}
+
+func loadLocal(t *testing.T, lookup func(string) (string, bool)) (Config, error) {
+	t.Helper()
+	loader, err := Prepare(t.Context(), lookup)
+	if err != nil {
+		return Config{}, err
+	}
+	return loader.Load(t.Context(), configcenter.MapSource{})
 }

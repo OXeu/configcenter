@@ -15,9 +15,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/glebarez/sqlite"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
 
 	"github.com/OXeu/center-common/httpui"
 	"github.com/OXeu/configcenter"
@@ -43,24 +40,17 @@ type Server struct {
 	mcpAPI        *gin.Engine
 }
 
-// Engine builds the gin engine for the given configuration.
-func Engine(ctx context.Context, cfg config.Config, log *slog.Logger) (*gin.Engine, error) {
-	s, err := newServer(ctx, cfg, log)
+// Engine builds the router using the caller's configuration and database connection.
+// The caller owns the store and must close it after the server shuts down.
+func Engine(ctx context.Context, cfg config.Config, st *store.Store, log *slog.Logger) (*gin.Engine, error) {
+	s, err := newServer(ctx, cfg, st, log)
 	if err != nil {
 		return nil, fmt.Errorf("start server: %w", err)
 	}
 	return s.router(), nil
 }
 
-func newServer(ctx context.Context, cfg config.Config, log *slog.Logger) (*Server, error) {
-	dialector, err := databaseDialector(cfg)
-	if err != nil {
-		return nil, err
-	}
-	st, err := store.Open(ctx, dialector, cfg.Bootstrap.AdminEmail, cfg.Bootstrap.AdminName)
-	if err != nil {
-		return nil, fmt.Errorf("open store: %w", err)
-	}
+func newServer(ctx context.Context, cfg config.Config, st *store.Store, log *slog.Logger) (*Server, error) {
 	provider, err := auth.NewProvider(ctx, cfg.OAuth)
 	if err != nil {
 		return nil, fmt.Errorf("configure oauth: %w", err)
@@ -85,32 +75,6 @@ func newServer(ctx context.Context, cfg config.Config, log *slog.Logger) (*Serve
 		return nil, err
 	}
 	return s, nil
-}
-
-func databaseDialector(cfg config.Config) (gorm.Dialector, error) {
-	switch cfg.DatabaseDriver {
-	case "", "sqlite":
-		dsn, err := sqliteDSN(cfg.DatabaseDSN)
-		if err != nil {
-			return nil, err
-		}
-		return sqlite.Open(dsn), nil
-	case "mysql":
-		return mysql.Open(cfg.DatabaseDSN), nil
-	default:
-		return nil, errors.New("unsupported database driver")
-	}
-}
-
-func sqliteDSN(dsn string) (string, error) {
-	if !strings.HasPrefix(dsn, "file:") {
-		return "", errors.New("database dsn must start with file")
-	}
-	sep := "?"
-	if strings.Contains(dsn, "?") {
-		sep = "&"
-	}
-	return dsn + sep + "_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)", nil
 }
 
 var errNoLanguage = errors.New("no enabled language has a locale file")

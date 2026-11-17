@@ -39,33 +39,42 @@ Accounts without a public email get `<id>@github.com`.
 
 ## Configuration
 
-The binary uses its own [Go SDK](sdk.md) to load configuration once at startup in `internal/config`. It reads the optional `.env.local` through the SDK's dotenv source without changing process variables; `CC_ENV_FILE` selects another file, and a missing file is allowed.
+The server and [Go SDK](sdk.md) share the `DataSource`, `LoadSnapshot` and `Snapshot` configuration layer. The SDK uses an HTTP adapter; server startup uses a database adapter on its own connection.
+
+Startup runs in this order:
+
+1. Read local database and first administrator settings from process variables or the optional `.env.local`; `CC_ENV_FILE` selects another file.
+2. Open the database and initialize its schema and reserved `configcenter/production` environment.
+3. Read runtime `CC_*` settings directly from that environment through `Store.ConfigurationSource`.
+4. Start the server with the resolved configuration and the same database connection.
+
+The process owns and closes the database connection. Startup configuration never calls the HTTP API and does not require an API key; `CC_CONFIGCENTER_URL`, `CC_CONFIGCENTER_API_KEY` and `CC_CONFIGCENTER_ENVIRONMENT` are not used by the server.
 
 Runtime settings resolve in this order:
 
-1. ConfigCenter values from the selected project and environment.
+1. Stored values in the `configcenter` project's `production` environment.
 2. Exported process environment variables.
 3. The local env file.
 4. Application defaults.
 
-Remote empty strings are explicit values: clearing an OAuth setting remotely does not restore its old local value. Empty local settings retain their default behavior. `CC_OAUTH_ISSUER` and `CC_PUBLIC_URL` are trimmed of trailing slashes; the callback defaults to `CC_PUBLIC_URL/oauth/callback`.
+Stored empty strings are explicit values: clearing an OAuth setting does not restore its old local value. Empty local settings retain their default behavior. `CC_OAUTH_ISSUER` and `CC_PUBLIC_URL` are trimmed of trailing slashes; the callback defaults to `CC_PUBLIC_URL/oauth/callback`.
 
-The SDK connection is bootstrapped only from process variables or the local env file; exported variables take precedence. Remote settings cannot redirect this connection.
+Bootstrap settings always come from process variables or the local env file, with exported values taking precedence. Stored copies of these keys cannot redirect the connection or change the first administrator.
 
 | Bootstrap variable | Default | Meaning |
 | --- | --- | --- |
 | `CC_ENV_FILE` | `.env.local` | Optional local bootstrap and fallback settings |
-| `CC_CONFIGCENTER_URL` | | ConfigCenter server root; omit together with the API key for local startup |
-| `CC_CONFIGCENTER_API_KEY` | | API key scoped to the project holding this server's settings |
-| `CC_CONFIGCENTER_ENVIRONMENT` | `production` | Environment to read within that project |
+| `CC_DB_DRIVER` | `sqlite` | Database backend: `sqlite` or `mysql` |
+| `CC_DB` | `file:configcenter.db` | SQLite or MySQL connection string |
+| `CC_BOOTSTRAP_ADMIN_EMAIL` / `_NAME` | `admin@localhost` / `admin` | First administrator, created when the user table is empty |
 
-The SDK requests the `CC_` prefix through the secret-reveal endpoint, so the key needs `projects:read`, `environments:read`, `config:read` and `config:read-secrets` on exactly one project. Store session secrets, database credentials and OAuth client secrets as secret configuration items.
+A fresh database starts with local runtime settings and defaults because its configuration environment is empty. Missing stored keys continue to use local fallbacks. Database errors, invalid bootstrap settings, malformed dotenv files, invalid resolved configuration and process cancellation fail startup.
 
-Remote reads time out after five seconds. A failed read logs a warning and uses local settings, allowing a single instance to restart when its own API is unavailable. Keep the required database and authentication fallback settings locally for this case.
+The database adapter returns secret settings as plaintext for trusted in-process execution; HTTP and SDK authorization requirements remain unchanged. Store session and OAuth client secrets as secret configuration items. Keep database credentials local, since they are needed before configuration can be read.
 
-Invalid bootstrap settings, malformed dotenv files, invalid resolved configuration and process cancellation fail startup. ConfigCenter does not write fallback values to the remote project or reload settings automatically; restart to apply changes. Startup logs include the listen address, public URL and OAuth enabled state, never secret values.
+To use AuthCenter, store `CC_OAUTH_ISSUER=https://auth.xeu.life`, its registered client ID and secret, the required scopes and callback in `configcenter/production`. These settings override older local GitHub configuration after restart.
 
-To use AuthCenter, store `CC_OAUTH_ISSUER=https://auth.xeu.life`, its registered client ID and secret, the required scopes and callback in the selected project environment. These settings then override older local GitHub configuration.
+Runtime configuration is read once at startup. ConfigCenter does not write local fallback values into the database automatically. Startup logs include the listen address, public URL and OAuth enabled state, never secret values.
 
 | Variable                                        | Default                       | Meaning                                                                  |
 | ----------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------ |
@@ -216,8 +225,7 @@ runner copy after deployment, and never uploads the package as a GitHub artifact
 The selected Tencent action runs serverless-cloud-framework; its source is pinned,
 but its upstream CLI installation is not version-pinned.
 
-SCF forces MySQL, production mode and port 9000. The HTTP trigger exposes a
-function URL with public and private access. Cloud-level authentication is NONE;
+SCF supplies MySQL bootstrap settings and local defaults for production mode and port 9000. Keep any stored `CC_ENV` and `CC_ADDR` values consistent with those deployment settings. The HTTP trigger exposes a function URL with public and private access. Cloud-level authentication is NONE;
 the application enforces OAuth sessions and API keys.
 
 1. Set `CC_PUBLIC_URL` to the function URL or its custom domain.

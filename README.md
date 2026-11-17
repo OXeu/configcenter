@@ -56,9 +56,9 @@ Open http://127.0.0.1:8080. This starts a local SQLite instance; sign-in remains
 
 ### Load settings from ConfigCenter
 
-Set `CC_CONFIGCENTER_URL`, `CC_CONFIGCENTER_API_KEY` and optionally `CC_CONFIGCENTER_ENVIRONMENT` in the process environment or `.env.local`. The bundled Go SDK reads runtime `CC_*` settings from the key's project, including OAuth settings such as `CC_OAUTH_ISSUER=https://auth.xeu.life`.
+Keep `CC_DB_DRIVER`, `CC_DB` and first administrator settings in the process environment or `.env.local`. Startup opens the database and directly reads runtime `CC_*` settings from the reserved `configcenter` project's `production` environment, including `CC_OAUTH_ISSUER=https://auth.xeu.life`.
 
-Remote values override local settings. Missing keys fall back to process variables, `.env.local` and defaults; remote failures warn and use local settings so the service can bootstrap itself. See [configuration](docs/guide.md#configuration) for permissions and startup behavior.
+The server and Go SDK share a configuration source and snapshot layer. Stored runtime values override local settings; missing keys fall back to process variables, `.env.local` and defaults. See [configuration](docs/guide.md#configuration) for startup behavior; self-configuration needs no running HTTP API or API key.
 
 ### Production and development
 

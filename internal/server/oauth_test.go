@@ -134,10 +134,7 @@ func testServer(t *testing.T, withOAuth bool) (*Server, *gin.Engine, *fakeIdP) {
 			RedirectURL: "http://127.0.0.1/oauth/callback", GroupsClaim: "groups",
 		}
 	}
-	srv, err := newServer(context.Background(), cfg, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
+	srv := newTestServer(t, cfg, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	router := srv.router()
 	return srv, router, idp
 }

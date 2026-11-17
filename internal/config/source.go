@@ -5,50 +5,71 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
-	"time"
 
 	"github.com/OXeu/configcenter/sdk/configcenter"
 )
 
-func loadSource(ctx context.Context, lookup func(string) (string, bool)) (func(string, string) string, error) {
+// Loader separates local database bootstrap settings from stored runtime settings.
+type Loader struct {
+	DatabaseDriver string
+	DatabaseDSN    string
+	Bootstrap      Bootstrap
+	local          func(string, string) string
+}
+
+// Prepare reads local bootstrap settings without opening a database or HTTP connection.
+func Prepare(ctx context.Context, lookup func(string) (string, bool)) (*Loader, error) {
 	envFile := lookupOr(lookup, "CC_ENV_FILE", DefaultEnvFile)
-	items, err := (configcenter.DotenvSource{Files: []string{envFile}}).Read(ctx, "CC_")
+	file, err := configcenter.LoadSnapshot(ctx, "CC_", configcenter.DotenvSource{Files: []string{envFile}})
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("load local configuration: %w", err)
 	}
-	fileValues := make(map[string]string, len(items))
-	for _, item := range items {
-		fileValues[item.Key] = item.Value
-	}
-	local := func(key string) (string, bool) {
+	local := func(key, fallback string) string {
 		if value, ok := lookup(key); ok {
-			return value, true
+			if value != "" {
+				return value
+			}
+			return fallback
 		}
-		value, ok := fileValues[key]
-		return value, ok
-	}
-	client, err := configcenter.New(configcenter.Config{
-		BaseURL:       lookupOr(local, "CC_CONFIGCENTER_URL", ""),
-		APIKey:        lookupOr(local, "CC_CONFIGCENTER_API_KEY", ""),
-		Environment:   lookupOr(local, "CC_CONFIGCENTER_ENVIRONMENT", "production"),
-		RevealSecrets: true,
-		DotenvFiles:   []string{},
-		Timeout:       5 * time.Second,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("configure configcenter SDK: %w", err)
-	}
-	if err := client.LoadPrefix(ctx, "CC_"); err != nil {
-		if ctx.Err() != nil {
-			return nil, fmt.Errorf("load remote configuration: %w", ctx.Err())
-		}
-		slog.WarnContext(ctx, "remote configuration unavailable; using local configuration", "error", err)
-	}
-	return func(key, fallback string) string {
-		if value, ok := client.Get(key); ok {
+		if value, ok := file.Get(key); ok && value != "" {
 			return value
 		}
-		return lookupOr(local, key, fallback)
+		return fallback
+	}
+	driver := local("CC_DB_DRIVER", "sqlite")
+	dsn, err := normalizeDatabase(driver, local("CC_DB", "file:configcenter.db"))
+	if err != nil {
+		return nil, err
+	}
+	return &Loader{
+		DatabaseDriver: driver,
+		DatabaseDSN:    dsn,
+		Bootstrap: Bootstrap{
+			AdminEmail: local("CC_BOOTSTRAP_ADMIN_EMAIL", "admin@localhost"),
+			AdminName:  local("CC_BOOTSTRAP_ADMIN_NAME", "admin"),
+		},
+		local: local,
 	}, nil
+}
+
+// Load resolves stored runtime settings before local fallbacks, keeping bootstrap settings local.
+func (l *Loader) Load(ctx context.Context, source configcenter.DataSource) (Config, error) {
+	snapshot, err := configcenter.LoadSnapshot(ctx, "CC_", source)
+	if err != nil {
+		return Config{}, fmt.Errorf("load stored configuration: %w", err)
+	}
+	return fromSnapshot(func(key, fallback string) string {
+		switch key {
+		case "CC_DB_DRIVER":
+			return l.DatabaseDriver
+		case "CC_DB":
+			return l.DatabaseDSN
+		case "CC_BOOTSTRAP_ADMIN_EMAIL":
+			return l.Bootstrap.AdminEmail
+		case "CC_BOOTSTRAP_ADMIN_NAME":
+			return l.Bootstrap.AdminName
+		default:
+			return snapshot.GetDefault(key, l.local(key, fallback))
+		}
+	})
 }

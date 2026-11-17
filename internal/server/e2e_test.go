@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -84,10 +83,7 @@ func newFlows(t *testing.T) *flows {
 			RedirectURL: "http://cc.test/oauth/callback", GroupsClaim: "groups",
 		},
 	}
-	srv, err := newServer(context.Background(), cfg, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})))
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
+	srv := newTestServer(t, cfg, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})))
 	f := &flows{t: t, router: srv.router(), cookies: map[string]*http.Cookie{}}
 
 	code, _ := f.do(http.MethodGet, "/auth/login", nil)
@@ -104,6 +100,24 @@ func newFlows(t *testing.T) *flows {
 	token, _ := me["csrf"].(string)
 	f.csrf = token
 	return f
+}
+
+func newTestServer(t *testing.T, cfg config.Config, log *slog.Logger) *Server {
+	t.Helper()
+	st, err := store.OpenDatabase(t.Context(), cfg.DatabaseDriver, cfg.DatabaseDSN, cfg.Bootstrap.AdminEmail, cfg.Bootstrap.AdminName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	srv, err := newServer(t.Context(), cfg, st, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return srv
 }
 
 func startState(t *testing.T, f *flows) (state, nonce string) {

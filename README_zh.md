@@ -56,9 +56,9 @@ CC_DB=file:.tmp/configcenter.db ./.tmp/bin/configcenter
 
 ### 从 ConfigCenter 加载配置
 
-在进程环境变量或 `.env.local` 中设置 `CC_CONFIGCENTER_URL`、`CC_CONFIGCENTER_API_KEY`，按需设置 `CC_CONFIGCENTER_ENVIRONMENT`。程序使用自身 Go SDK，从密钥所属项目读取运行时 `CC_*` 配置，包括 `CC_OAUTH_ISSUER=https://auth.xeu.life` 等 OAuth 设置。
+在进程环境变量或 `.env.local` 中保留 `CC_DB_DRIVER`、`CC_DB` 和首次管理员设置。程序启动时打开数据库，直接读取保留项目 `configcenter` 的 `production` 环境中的运行时 `CC_*` 配置，包括 `CC_OAUTH_ISSUER=https://auth.xeu.life`。
 
-远程值优先于本地配置；缺失项依次回退到进程环境变量、`.env.local` 和默认值。远程读取失败时记录告警并使用本地配置，以支持服务自身启动。权限与启动行为见[配置说明](docs/guide.md#configuration)。
+服务端与 Go SDK 共用配置数据源和快照抽象层；数据库中的运行时值优先，缺失项依次回退到进程环境变量、`.env.local` 和默认值。自身配置加载无需 HTTP API 在线，也不需要 API Key；启动行为见[配置说明](docs/guide.md#configuration)。
 
 ### 生产部署与开发
 

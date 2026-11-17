@@ -1,185 +1,133 @@
 package config
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"log/slog"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/OXeu/configcenter/sdk/configcenter"
 )
 
-func TestLoadPrefersRemoteConfiguration(t *testing.T) {
-	remote := configRemote(t, "staging", map[string]string{
-		"CC_PUBLIC_URL":          "https://config.example/",
-		"CC_OAUTH_ISSUER":        "https://auth.xeu.life/",
-		"CC_OAUTH_CLIENT_ID":     "authcenter-client",
-		"CC_OAUTH_CLIENT_SECRET": "remote-client-secret",
-		"CC_OAUTH_SCOPES":        "profile email",
-		"CC_SESSION_SECRET":      "remote-session-secret",
-		"CC_LANGUAGES":           "zh-CN,en",
-		"CC_ENV":                 "production",
-	})
-	file := configFile(t, "CC_CONFIGCENTER_URL="+remote.URL+"\n"+
-		"CC_CONFIGCENTER_API_KEY=cc_file\nCC_CONFIGCENTER_ENVIRONMENT=staging\n"+
-		"CC_ADDR=127.0.0.1:9999\nCC_BOOTSTRAP_ADMIN_NAME=file-admin\n"+
+func TestLoadPrefersStoredConfiguration(t *testing.T) {
+	file := configFile(t, "CC_ADDR=127.0.0.1:9999\nCC_BOOTSTRAP_ADMIN_NAME=file-admin\n"+
 		"CC_OAUTH_ISSUER=https://github.com/login/oauth\nCC_OAUTH_SCOPES=read:user user:email\n")
-	cfg, err := Load(t.Context(), configLookup(map[string]string{
-		"CC_ENV_FILE":             file,
-		"CC_CONFIGCENTER_API_KEY": "cc_test",
-		"CC_PUBLIC_URL":           "http://local.example",
-		"CC_OAUTH_ISSUER":         "https://github.com",
-		"CC_OAUTH_CLIENT_SECRET":  "local-client-secret",
-		"CC_SESSION_SECRET":       "local-session-secret",
-		"CC_ADDR":                 "127.0.0.1:7777",
+	loader, err := Prepare(t.Context(), configLookup(map[string]string{
+		"CC_ENV_FILE":            file,
+		"CC_PUBLIC_URL":          "http://local.example",
+		"CC_OAUTH_ISSUER":        "https://github.com",
+		"CC_OAUTH_CLIENT_SECRET": "local-client-secret",
+		"CC_SESSION_SECRET":      "local-session-secret",
+		"CC_ADDR":                "127.0.0.1:7777",
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.OAuth.IssuerURL != "https://auth.xeu.life" || cfg.OAuth.ClientID != "authcenter-client" || strings.Join(cfg.OAuth.Scopes, " ") != "profile email" {
-		t.Fatal("remote OAuth settings did not override local settings")
+	cfg, err := loader.Load(t.Context(), configcenter.MapSource{
+		"CC_PUBLIC_URL":          "https://config.example/",
+		"CC_OAUTH_ISSUER":        "https://auth.xeu.life/",
+		"CC_OAUTH_CLIENT_ID":     "authcenter-client",
+		"CC_OAUTH_CLIENT_SECRET": "stored-client-secret",
+		"CC_OAUTH_SCOPES":        "profile email",
+		"CC_SESSION_SECRET":      "stored-session-secret",
+		"CC_LANGUAGES":           "zh-CN,en",
+		"CC_ENV":                 "production",
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if cfg.OAuth.ClientSecret != "remote-client-secret" || cfg.SessionSecret != "remote-session-secret" {
-		t.Fatal("secret settings did not use the privileged remote snapshot")
+	if cfg.OAuth.IssuerURL != "https://auth.xeu.life" || cfg.OAuth.ClientID != "authcenter-client" || strings.Join(cfg.OAuth.Scopes, " ") != "profile email" {
+		t.Fatal("stored OAuth settings did not override local settings")
+	}
+	if cfg.OAuth.ClientSecret != "stored-client-secret" || cfg.SessionSecret != "stored-session-secret" {
+		t.Fatal("secret settings did not use the stored snapshot")
 	}
 	if cfg.PublicURL != "https://config.example" || cfg.OAuth.RedirectURL != "https://config.example/oauth/callback" {
-		t.Fatal("callback did not use the remote public URL")
+		t.Fatal("callback did not use the stored public URL")
 	}
 	if cfg.Addr != "127.0.0.1:7777" || cfg.Bootstrap.AdminName != "file-admin" || cfg.DatabaseDriver != "sqlite" {
-		t.Fatal("missing remote keys did not fall back to environment, dotenv and defaults")
+		t.Fatal("missing stored keys did not fall back to environment, dotenv and defaults")
 	}
 	if strings.Join(cfg.Languages, ",") != "zh-CN,en" {
-		t.Fatal("languages did not use the remote snapshot")
+		t.Fatal("languages did not use the stored snapshot")
 	}
 }
 
-func TestLoadPreservesEmptyRemoteValues(t *testing.T) {
-	remote := configRemote(t, "production", map[string]string{
+func TestLoadPreservesEmptyStoredValues(t *testing.T) {
+	loader := testLoader(t, map[string]string{
+		"CC_OAUTH_ISSUER":        "https://github.com",
+		"CC_OAUTH_CLIENT_SECRET": "local-secret",
+		"CC_OAUTH_SCOPES":        "read:user user:email",
+		"CC_OAUTH_REDIRECT_URL":  "http://local.example/oauth/callback",
+	})
+	cfg, err := loader.Load(t.Context(), configcenter.MapSource{
 		"CC_OAUTH_ISSUER":        "",
 		"CC_OAUTH_CLIENT_SECRET": "",
 		"CC_OAUTH_SCOPES":        "",
 		"CC_OAUTH_REDIRECT_URL":  "",
 		"CC_PUBLIC_URL":          "https://config.example",
 	})
-	cfg, err := Load(t.Context(), configLookup(map[string]string{
-		"CC_ENV_FILE":             configFile(t, ""),
-		"CC_CONFIGCENTER_URL":     remote.URL,
-		"CC_CONFIGCENTER_API_KEY": "cc_test",
-		"CC_OAUTH_ISSUER":         "https://github.com",
-		"CC_OAUTH_CLIENT_SECRET":  "local-secret",
-		"CC_OAUTH_SCOPES":         "read:user user:email",
-		"CC_OAUTH_REDIRECT_URL":   "http://local.example/oauth/callback",
-	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.OAuth.IssuerURL != "" || cfg.OAuth.ClientSecret != "" || len(cfg.OAuth.Scopes) != 0 {
-		t.Fatal("empty remote settings restored local OAuth values")
+		t.Fatal("empty stored settings restored local OAuth values")
 	}
 	if cfg.OAuth.RedirectURL != "https://config.example/oauth/callback" {
-		t.Fatal("empty remote callback did not restore automatic derivation")
+		t.Fatal("empty stored callback did not restore automatic derivation")
 	}
 }
 
-func TestLoadRemoteFailureWarnsAndFallsBack(t *testing.T) {
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "private-response-value", http.StatusServiceUnavailable)
-	}))
-	defer remote.Close()
-	cfg, err := Load(t.Context(), configLookup(map[string]string{
-		"CC_ENV_FILE":             configFile(t, "CC_PUBLIC_URL=https://fallback.example\n"),
-		"CC_CONFIGCENTER_URL":     remote.URL,
-		"CC_CONFIGCENTER_API_KEY": "cc_private-token",
-		"CC_ADDR":                 "127.0.0.1:9010",
-		"CC_SESSION_SECRET":       "private-session-secret",
-	}))
+func TestLoadKeepsBootstrapSettingsLocal(t *testing.T) {
+	loader := testLoader(t, map[string]string{
+		"CC_DB":                    "file:bootstrap?mode=memory&cache=shared",
+		"CC_BOOTSTRAP_ADMIN_EMAIL": "local@example.com",
+		"CC_BOOTSTRAP_ADMIN_NAME":  "local-admin",
+	})
+	cfg, err := loader.Load(t.Context(), configcenter.MapSource{
+		"CC_DB_DRIVER":             "mysql",
+		"CC_DB":                    "invalid-stored-database",
+		"CC_BOOTSTRAP_ADMIN_EMAIL": "stored@example.com",
+		"CC_BOOTSTRAP_ADMIN_NAME":  "stored-admin",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Addr != "127.0.0.1:9010" || cfg.PublicURL != "https://fallback.example" || cfg.DatabaseDriver != "sqlite" {
-		t.Fatal("unavailable remote prevented local startup")
-	}
-	if !strings.Contains(logs.String(), "WARN") || !strings.Contains(logs.String(), "using local configuration") {
-		t.Fatal("remote failure was not reported")
-	}
-	if strings.Contains(logs.String(), "private") {
-		t.Fatal("configuration warning exposed a secret or response body")
+	if cfg.DatabaseDriver != "sqlite" || cfg.DatabaseDSN != loader.DatabaseDSN || cfg.Bootstrap != loader.Bootstrap {
+		t.Fatal("stored settings changed the bootstrap database or administrator")
 	}
 }
 
-func TestLoadRejectsInvalidRemoteConfiguration(t *testing.T) {
-	remote := configRemote(t, "production", map[string]string{
-		"CC_ADDR": "invalid-address",
-	})
-	_, err := Load(t.Context(), configLookup(map[string]string{
-		"CC_ENV_FILE":             configFile(t, ""),
-		"CC_CONFIGCENTER_URL":     remote.URL,
-		"CC_CONFIGCENTER_API_KEY": "cc_test",
-		"CC_ADDR":                 "127.0.0.1:8080",
-	}))
-	if err == nil {
-		t.Fatal("invalid remote configuration was replaced with valid local settings")
+func TestLoadValidatesOnlyResolvedRuntimeConfiguration(t *testing.T) {
+	loader := testLoader(t, map[string]string{"CC_ADDR": "invalid-local-address"})
+	if _, err := loader.Load(t.Context(), configcenter.MapSource{"CC_ADDR": "127.0.0.1:8080"}); err != nil {
+		t.Fatal("invalid local fallback prevented valid stored configuration", err)
+	}
+	loader = testLoader(t, map[string]string{"CC_ADDR": "127.0.0.1:8080"})
+	if _, err := loader.Load(t.Context(), configcenter.MapSource{"CC_ADDR": "invalid-stored-address"}); err == nil {
+		t.Fatal("invalid stored configuration was replaced with local settings")
+	}
+	loader = testLoader(t, map[string]string{"CC_SESSION_SECRET": "old-local-secret"})
+	if _, err := loader.Load(t.Context(), configcenter.MapSource{"CC_ENV": "production", "CC_SESSION_SECRET": ""}); err == nil {
+		t.Fatal("empty stored production secret fell back to a local secret")
 	}
 }
 
-func TestLoadRequiresRemoteSessionSecretInProduction(t *testing.T) {
-	remote := configRemote(t, "production", map[string]string{
-		"CC_ENV":            "production",
-		"CC_SESSION_SECRET": "",
-	})
-	_, err := Load(t.Context(), configLookup(map[string]string{
-		"CC_ENV_FILE":             configFile(t, ""),
-		"CC_CONFIGCENTER_URL":     remote.URL,
-		"CC_CONFIGCENTER_API_KEY": "cc_test",
-		"CC_SESSION_SECRET":       "old-local-secret",
-	}))
-	if err == nil {
-		t.Fatal("empty remote production secret fell back to a local secret")
+func TestLoadSourceFailureAndCancellationDoNotFallBack(t *testing.T) {
+	loader := testLoader(t, map[string]string{})
+	failure := errors.New("database unavailable")
+	if _, err := loader.Load(t.Context(), failedSource{err: failure}); !errors.Is(err, failure) {
+		t.Fatalf("expected database failure, got %v", err)
 	}
-}
-
-func TestLoadRejectsIncompleteRemoteConnection(t *testing.T) {
-	for _, values := range []map[string]string{
-		{"CC_CONFIGCENTER_URL": "https://config.example"},
-		{"CC_CONFIGCENTER_API_KEY": "cc_test"},
-		{"CC_CONFIGCENTER_URL": "https://config.example", "CC_CONFIGCENTER_API_KEY": "invalid"},
-	} {
-		values["CC_ENV_FILE"] = configFile(t, "")
-		if _, err := Load(t.Context(), configLookup(values)); err == nil {
-			t.Fatal("invalid bootstrap settings were accepted")
-		}
-	}
-}
-
-func TestLoadCancellationDoesNotFallBack(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	remote := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		cancel()
-		<-r.Context().Done()
-	}))
-	defer remote.Close()
-	_, err := Load(ctx, configLookup(map[string]string{
-		"CC_ENV_FILE":             configFile(t, ""),
-		"CC_CONFIGCENTER_URL":     remote.URL,
-		"CC_CONFIGCENTER_API_KEY": "cc_test",
-	}))
-	if !errors.Is(err, context.Canceled) {
+	cancel()
+	if _, err := loader.Load(ctx, configcenter.MapSource{}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected cancellation, got %v", err)
 	}
 }
 
-func TestLoadRejectsInvalidDotenvWithoutLeakingValues(t *testing.T) {
-	_, err := Load(t.Context(), configLookup(map[string]string{
+func TestPrepareRejectsInvalidDotenvWithoutLeakingValues(t *testing.T) {
+	_, err := Prepare(t.Context(), configLookup(map[string]string{
 		"CC_ENV_FILE": configFile(t, "CC_SESSION_SECRET=\"private-session-secret\n"),
 	}))
 	if !errors.Is(err, configcenter.ErrInvalidDotenv) {
@@ -190,23 +138,18 @@ func TestLoadRejectsInvalidDotenvWithoutLeakingValues(t *testing.T) {
 	}
 }
 
-func configRemote(t *testing.T, environment string, values map[string]string) *httptest.Server {
+func testLoader(t *testing.T, values map[string]string) *Loader {
 	t.Helper()
-	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/agent/environments/"+environment+"/values/reveal" {
-			t.Errorf("unexpected configuration request: %s %s", r.Method, r.URL.Path)
-		}
-		if r.URL.Query().Get("prefix") != "CC_" || r.Header.Get("Authorization") != "Bearer cc_test" {
-			t.Error("configuration request did not use the expected prefix and project key")
-		}
-		items := make([]configcenter.Item, 0, len(values))
-		for key, value := range values {
-			items = append(items, configcenter.Item{Key: key, Value: value, Secret: strings.Contains(key, "SECRET")})
-		}
-		if err := json.NewEncoder(w).Encode(map[string]any{"items": items}); err != nil {
-			t.Error(err)
-		}
-	}))
-	t.Cleanup(remote.Close)
-	return remote
+	values["CC_ENV_FILE"] = configFile(t, "")
+	loader, err := Prepare(t.Context(), configLookup(values))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return loader
+}
+
+type failedSource struct{ err error }
+
+func (s failedSource) Read(context.Context, string) ([]configcenter.Item, error) {
+	return nil, s.err
 }

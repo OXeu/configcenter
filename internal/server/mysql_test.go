@@ -7,23 +7,20 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OXeu/configcenter/internal/config"
 	"github.com/OXeu/configcenter/internal/store"
 )
 
 func TestMySQLStore(t *testing.T) {
 	ctx := context.Background()
-	dialect, err := databaseDialector(config.Config{
-		DatabaseDriver: "mysql",
-		DatabaseDSN:    "root@tcp(127.0.0.1:23306)/configcenter?parseTime=true",
+	st, err := store.OpenDatabase(ctx, "mysql", "root@tcp(127.0.0.1:23306)/configcenter?parseTime=true", "admin@example.com", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	st, err := store.Open(ctx, dialect, "admin@example.com", "admin")
-	if err != nil {
-		t.Fatal(err)
-	}
 	project, err := st.CreateProject(ctx, store.Project{Slug: "mysql-test", Name: "MySQL"}, store.Environment{Slug: "default", Name: "Default"})
 	if err != nil {
 		t.Fatal(err)

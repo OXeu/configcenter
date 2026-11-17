@@ -13,6 +13,7 @@ import (
 
 	"github.com/OXeu/configcenter/internal/config"
 	"github.com/OXeu/configcenter/internal/server"
+	"github.com/OXeu/configcenter/internal/store"
 )
 
 func main() {
@@ -27,13 +28,18 @@ func run(logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	cfg, err := config.Load(ctx, os.LookupEnv)
+	cfg, st, err := loadConfiguration(ctx, os.LookupEnv)
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return err
 	}
+	defer func() {
+		if err := st.Close(); err != nil {
+			logger.Error("close database", "error", err)
+		}
+	}()
 	logger.Info("configuration loaded", "addr", cfg.Addr, "public_url", cfg.PublicURL, "oauth", cfg.OAuth.Enabled(), "database_driver", cfg.DatabaseDriver)
 
-	engine, err := server.Engine(ctx, cfg, logger)
+	engine, err := server.Engine(ctx, cfg, st, logger)
 	if err != nil {
 		return fmt.Errorf("build server: %w", err)
 	}
@@ -67,4 +73,20 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("shutdown: %w", err)
 	}
 	return nil
+}
+
+func loadConfiguration(ctx context.Context, lookup func(string) (string, bool)) (config.Config, *store.Store, error) {
+	loader, err := config.Prepare(ctx, lookup)
+	if err != nil {
+		return config.Config{}, nil, fmt.Errorf("load bootstrap configuration: %w", err)
+	}
+	st, err := store.OpenDatabase(ctx, loader.DatabaseDriver, loader.DatabaseDSN, loader.Bootstrap.AdminEmail, loader.Bootstrap.AdminName)
+	if err != nil {
+		return config.Config{}, nil, fmt.Errorf("open database: %w", err)
+	}
+	cfg, err := loader.Load(ctx, st.ConfigurationSource("configcenter", "production"))
+	if err != nil {
+		return config.Config{}, nil, fmt.Errorf("load runtime configuration: %w", errors.Join(err, st.Close()))
+	}
+	return cfg, st, nil
 }

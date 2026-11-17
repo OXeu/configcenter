@@ -37,23 +37,27 @@ func Open(ctx context.Context, dialector gorm.Dialector, adminEmail, adminName s
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
-	if err := db.WithContext(ctx).AutoMigrate(
+	s := &Store{db: db}
+	if err := s.initialize(ctx, adminEmail, adminName); err != nil {
+		return nil, errors.Join(err, s.Close())
+	}
+	return s, nil
+}
+
+func (s *Store) initialize(ctx context.Context, adminEmail, adminName string) error {
+	if err := s.db.WithContext(ctx).AutoMigrate(
 		&User{}, &Session{}, &Project{}, &Environment{}, &ConfigItem{}, &APIKey{}, &MCPProposal{},
 		&MCPClient{}, &MCPAuthorization{}, &MCPGrant{}, &MCPToken{},
 	); err != nil {
-		return nil, fmt.Errorf("migrate schema: %w", err)
+		return fmt.Errorf("migrate schema: %w", err)
 	}
-	s := &Store{db: db}
 	if err := s.ensureAdmin(ctx, adminEmail, adminName); err != nil {
-		return nil, err
+		return err
 	}
 	if err := s.ensureSystemProject(ctx); err != nil {
-		return nil, err
+		return err
 	}
-	if err := s.ensurePrimaryEnvironments(ctx); err != nil {
-		return nil, err
-	}
-	return s, nil
+	return s.ensurePrimaryEnvironments(ctx)
 }
 
 func (s *Store) ensureAdmin(ctx context.Context, email, name string) error {

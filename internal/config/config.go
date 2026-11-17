@@ -1,7 +1,6 @@
 package config
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -38,16 +37,6 @@ type Bootstrap struct {
 // DefaultEnvFile is read by the binary unless CC_ENV_FILE points elsewhere.
 const DefaultEnvFile = ".env.local"
 
-// Load reads runtime settings through the SDK, preferring remote configuration
-// over the process environment, the optional env file and application defaults.
-func Load(ctx context.Context, lookup func(string) (string, bool)) (Config, error) {
-	env, err := loadSource(ctx, lookup)
-	if err != nil {
-		return Config{}, err
-	}
-	return fromSnapshot(env)
-}
-
 func fromSnapshot(env func(string, string) string) (Config, error) {
 	cfg := Config{
 		Addr:           env("CC_ADDR", "127.0.0.1:8080"),
@@ -83,24 +72,6 @@ func fromSnapshot(env func(string, string) string) (Config, error) {
 	if _, port, err := net.SplitHostPort(cfg.Addr); err != nil || port == "" {
 		errs = append(errs, fmt.Errorf("cc addr %q is not host:port", cfg.Addr))
 	}
-	if cfg.DatabaseDriver != "sqlite" && cfg.DatabaseDriver != "mysql" {
-		errs = append(errs, errors.New("cc db driver must be sqlite or mysql"))
-	}
-	if cfg.DatabaseDriver == "mysql" && (cfg.DatabaseDSN == "" || strings.HasPrefix(cfg.DatabaseDSN, "file:")) {
-		errs = append(errs, errors.New("cc db requires a MySQL DSN when using mysql"))
-	}
-	if cfg.DatabaseDriver == "mysql" {
-		parsed, err := mysql.ParseDSN(cfg.DatabaseDSN)
-		if err != nil || parsed.DBName == "" {
-			errs = append(errs, errors.New("cc db must be a valid MySQL DSN with a database name"))
-		} else {
-			parsed.ParseTime = true
-			cfg.DatabaseDSN = parsed.FormatDSN()
-		}
-	}
-	if cfg.DatabaseDriver == "sqlite" && !strings.HasPrefix(cfg.DatabaseDSN, "file:") {
-		errs = append(errs, errors.New("cc db must be a sqlite dsn starting with file"))
-	}
 	if cfg.SessionSecret == "" && env("CC_ENV", "") == "production" {
 		errs = append(errs, errors.New("cc session secret is required in production mode"))
 	}
@@ -108,6 +79,28 @@ func fromSnapshot(env func(string, string) string) (Config, error) {
 		return Config{}, errors.Join(errs...)
 	}
 	return cfg, nil
+}
+
+func normalizeDatabase(driver, dsn string) (string, error) {
+	switch driver {
+	case "sqlite":
+		if !strings.HasPrefix(dsn, "file:") {
+			return "", errors.New("cc db must be a sqlite dsn starting with file")
+		}
+		return dsn, nil
+	case "mysql":
+		if dsn == "" || strings.HasPrefix(dsn, "file:") {
+			return "", errors.New("cc db requires a MySQL DSN when using mysql")
+		}
+		parsed, err := mysql.ParseDSN(dsn)
+		if err != nil || parsed.DBName == "" {
+			return "", errors.New("cc db must be a valid MySQL DSN with a database name")
+		}
+		parsed.ParseTime = true
+		return parsed.FormatDSN(), nil
+	default:
+		return "", errors.New("cc db driver must be sqlite or mysql")
+	}
 }
 
 // lookupOr returns the value of key when it is set and non-empty.

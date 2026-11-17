@@ -4,14 +4,14 @@ Rules for anyone (human or model) changing configcenter. They are enforced where
 
 ## Layout
 
-- `cmd/configcenter` — main, flags-free, SDK configured. `internal/config` reads `.env.local` (or `CC_ENV_FILE`) through the SDK without modifying process variables. Never print secret values.
-- `internal/config` — reads every environment variable here and nowhere else. Local `CC_CONFIGCENTER_*` settings bootstrap the SDK; runtime settings prefer ConfigCenter, then exported variables, the env file and defaults. Remote read failures warn and fall back locally; cancellation and invalid configuration fail startup.
+- `cmd/configcenter` — main, flags-free. Bootstrap the database from local settings, load runtime configuration directly from `configcenter/production`, then pass the same store to the server. Never fetch startup configuration through HTTP or an API key; never print secret values.
+- `internal/config` — reads every environment variable here and nowhere else. Read `.env.local` (or `CC_ENV_FILE`) without modifying process variables. Database connection and first administrator settings stay local; runtime values prefer the database, exported variables, the env file and defaults. Database errors, cancellation and invalid configuration fail startup.
 - `internal/store` — gorm models and all queries; one `Store` method per query.
 - `internal/auth` — sessions, roles, CSRF, API-key and agent middleware, OAuth provider adapter.
 - `center-common/oauth` — the shared RFC 6749 + OIDC client (discovery, PKCE, id_token verification, userinfo fallback).
 - `internal/server` — gin router, REST handlers, MCP endpoint, Go templates (`templates/shell/vue.html`), embedded static files.
 - `web/ui` — Vue 3 single-file components and Tailwind CSS; Vite Plus builds into `.tmp/ui`, embedded by root `assets.go`.
-- `sdk/configcenter` — separate module with the public Go client.
+- `sdk/configcenter` — separate module with the public Go client and shared `DataSource`, `LoadSnapshot` and `Snapshot` abstractions. HTTP and in-process database adapters share configuration merging and lookup behavior; keep database queries in `internal/store`.
 - `docs/commits.md` — the commit message rules (Conventional Commits 1.0.0 plus this repository's constraints).
 
 ## Commits

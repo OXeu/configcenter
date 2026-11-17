@@ -134,6 +134,25 @@ items, err := source.Read(ctx, "db.")
 
 `Read` 返回匹配前缀的配置项，不修改客户端快照；`Sources.Read` 按键排序。调用期间不要修改传入的 map 或文件列表。`New` 会复制 `Config` 中的默认值 map 和文件列表。
 
+### 共享配置快照
+
+`LoadSnapshot(ctx, prefix, sources...)` 是 SDK 与 ConfigCenter 内部共用的配置读取层，统一处理来源优先级、前缀过滤、空值和错误传播。返回的 `Snapshot` 提供 `Get`、`GetDefault` 和按键排序的 `All`，其内容不会随来源或返回切片的修改而变化。
+
+```go
+snapshot, err := configcenter.LoadSnapshot(ctx, "db.",
+    configcenter.DotenvSource{Files: []string{".env.local"}},
+    configcenter.MapSource{"db.pool": "10"},
+)
+if err != nil {
+    return fmt.Errorf("load settings: %w", err)
+}
+pool := snapshot.GetDefault("db.pool", "10")
+```
+
+SDK 的 HTTP 读取、dotenv 和默认值均通过这层加载；原有内存缓存和 TTL 行为保持不变。服务端的 `Store.ConfigurationSource` 实现同一个 `DataSource` 接口，直接查询已有数据库连接，不需要 HTTP 或 API Key。独立 SDK 不依赖数据库驱动或服务端包。
+
+ConfigCenter 启动时从本地配置打开数据库，再读取 `configcenter/production` 中的 `CC_*` 设置，并把同一连接交给 HTTP 服务。数据库连接和首次管理员设置只由本地提供，避免启动循环；缺失运行时键回退本地，数据库读取失败则终止启动。
+
 ## 快照读取
 
 | 方法                        | 行为                                               |
