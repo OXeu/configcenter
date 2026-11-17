@@ -19,7 +19,13 @@ async function decide(approve: boolean) {
     })) as { redirect: string }
     const redirect = new URL(result.redirect)
     const registered = new URL(props.data.consent.redirectUri)
-    if (redirect.origin !== registered.origin || redirect.pathname !== registered.pathname)
+    if (
+      redirect.protocol !== registered.protocol ||
+      redirect.host !== registered.host ||
+      redirect.pathname !== registered.pathname ||
+      redirect.username !== registered.username ||
+      redirect.password !== registered.password
+    )
       throw new Error(msg('error.title'))
     location.assign(redirect.href)
   } catch (err) {

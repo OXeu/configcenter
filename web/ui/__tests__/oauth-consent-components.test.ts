@@ -32,10 +32,10 @@ const data: PageData = {
 }
 
 const report = vi.fn()
-function consent(lang = 'en') {
+function consent(lang = 'en', redirectUri = data.consent!.redirectUri) {
   return mount(OAuthConsentPage, {
     props: {
-      data: { ...data, lang },
+      data: { ...data, lang, consent: { ...data.consent!, redirectUri } },
       page: { msg: createCopy(lang).msg, csrf: data.csrf, describe: String, report },
     },
   })
@@ -112,6 +112,33 @@ it('rejects a redirect outside the displayed callback', async () => {
     new Response(JSON.stringify({ redirect: 'https://other.example/callback?code=one' })),
   )
   const wrapper = consent()
+  await wrapper.get('button').trigger('click')
+  await flushPromises()
+  expect(report).toHaveBeenCalledTimes(1)
+  expect(location.assign).not.toHaveBeenCalled()
+  wrapper.unmount()
+})
+
+it('returns an approved authorization to the registered Cursor callback', async () => {
+  const callback = 'cursor://anysphere.cursor-mcp/oauth/callback'
+  const redirect = `${callback}?code=one&state=state`
+  vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ redirect })))
+  const wrapper = consent('en', callback)
+  await wrapper.get('button').trigger('click')
+  await flushPromises()
+  expect(location.assign).toHaveBeenCalledWith(redirect)
+  expect(report).not.toHaveBeenCalled()
+  wrapper.unmount()
+})
+
+it.each([
+  'cursor://another-app/oauth/callback?code=one',
+  'other-app://anysphere.cursor-mcp/oauth/callback?code=one',
+  'cursor://anysphere.cursor-mcp/other-command?code=one',
+  'cursor://user@anysphere.cursor-mcp/oauth/callback?code=one',
+])('rejects native callback substitution: %s', async (redirect) => {
+  vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ redirect })))
+  const wrapper = consent('en', 'cursor://anysphere.cursor-mcp/oauth/callback')
   await wrapper.get('button').trigger('click')
   await flushPromises()
   expect(report).toHaveBeenCalledTimes(1)

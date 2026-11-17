@@ -128,6 +128,9 @@ func validMCPRedirect(raw string) bool {
 	if err != nil || len(raw) > 2048 || u.Hostname() == "" || u.User != nil || strings.ContainsAny(raw, "#*\\") || u.Opaque != "" {
 		return false
 	}
+	if raw == "cursor://anysphere.cursor-mcp/oauth/callback" {
+		return true
+	}
 	return u.Scheme == "https" || (u.Scheme == "http" && slices.Contains([]string{"localhost", "127.0.0.1", "::1"}, u.Hostname()))
 }
 

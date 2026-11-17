@@ -48,7 +48,9 @@ API Key 的每项 scope 绑定项目与操作权限，`project: "*"` 覆盖所�
 }
 ```
 
-支持无客户端密钥的 public client。回调地址必须为 HTTPS，或 `localhost`、`127.0.0.1`、`[::1]` 的 HTTP 地址；授权请求必须与注册地址精确匹配，包括端口和查询参数。不支持通配符、fragment、implicit flow、密码授权或 `client_credentials`。
+支持无客户端密钥的 public client。回调地址支持 HTTPS、`localhost`/`127.0.0.1`/`[::1]` 的 HTTP 地址，以及 Cursor 的固定原生回调 `cursor://anysphere.cursor-mcp/oauth/callback`；授权请求必须与注册地址精确匹配，包括端口和查询参数。不支持通配符、fragment、implicit flow、密码授权或 `client_credentials`。
+
+Cursor 的部分版本会同时注册原生回调、HTTPS 回调和本机 HTTP 回调，服务端保留完整列表，授权时可以选择其中任意一个。原生回调仅允许上述固定地址；其他 scheme、host、路径、端口和附加参数不在允许范围内。若点击认证后出现 `SSE error: Non-200 status code (401)`，应先查看 `/oauth/register` 的响应：`invalid_redirect_uri` 表示回调注册已失败，SSE 401 可能只是客户端回退连接后的错误。
 
 授权请求包含 `client_id`、`redirect_uri`、`response_type=code`、`scope=mcp`、`resource=CC_PUBLIC_URL/mcp`、`code_challenge` 和 `code_challenge_method=S256`。客户端应生成并验证 `state`。授权响应保留 `state`，同时返回 `iss`。PKCE verifier 长度为 43–128，必须由 RFC 7636 允许的字符组成。
 
