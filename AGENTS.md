@@ -27,7 +27,9 @@ Commit messages follow [`docs/commits.md`](docs/commits.md): Conventional Commit
 5. **Go's scratch space.** `go test` and `go build` write their intermediate working directory to `$TMPDIR`, which defaults to `/tmp`; `go` removes it on exit. `make test` sets `TMPDIR` to `.tmp`, so `make test` and `make check` never touch `/tmp`. Run Go commands through `make` or set `TMPDIR=$PWD/.tmp` yourself. The build cache (`GOCACHE`) is a cache, not an artifact, and stays where the environment puts it.
 6. Verify: after a task that ran tests or experiments, `git status --short` shows no new untracked paths other than those intended for the task, and `.tmp/` contains only what is still needed.
 
-Shared `no-restricted-files` lint permits documentation only in top-level `docs/`, `.github/`, and the root `README.md` and `AGENTS.md`. Keep temporary explanations, plans and reports in ignored `.tmp/`; never add them to the root or source directories.
+Shared `no-restricted-files` lint permits documentation only in top-level `docs/`, `.github/`, and the root `README.md`, `README_zh.md`, `AGENTS.md` and `LICENSE`. Keep temporary explanations, plans and reports in ignored `.tmp/`; never add them to the root or source directories.
+
+- `readme-layout` requires English `README.md` and Chinese `README_zh.md`, with centered logo/h3/one-sentence introduction, language links, documentation navigation, badges, Preview/Gallery, optional Features/Why, Install/Quick Start, Star History graph and LICENSE, in that order. Keep real deployment commands and valid local links; link the Apache-2.0 `LICENSE` file in both READMEs.
 
 ## Backend rules
 
