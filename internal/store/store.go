@@ -280,7 +280,7 @@ func (s *Store) DeleteProject(ctx context.Context, id uint) error {
 func (s *Store) ListItems(ctx context.Context, projectID, envID uint, keyPrefix string) ([]ConfigItem, error) {
 	q := s.db.WithContext(ctx).Where("project_id = ? AND environment_id = ?", projectID, envID)
 	if keyPrefix != "" {
-		q = q.Where("`key` LIKE ?", escapeLike(keyPrefix)+"%")
+		q = q.Where("`key` LIKE ? ESCAPE '!'", escapeLike(keyPrefix)+"%")
 	}
 	var items []ConfigItem
 	if err := q.Order(clause.OrderByColumn{Column: clause.Column{Name: "key"}}).Find(&items).Error; err != nil {
@@ -509,8 +509,8 @@ func escapeLike(s string) string {
 	out := make([]byte, 0, len(s))
 	for i := 0; i < len(s); i++ {
 		switch s[i] {
-		case '%', '_', '\\':
-			out = append(out, '\\')
+		case '%', '_', '!':
+			out = append(out, '!')
 		}
 		out = append(out, s[i])
 	}
