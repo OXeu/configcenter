@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Button from '@oxeu/center-common/ui/Button.vue'
+import { navigateDocument } from '@oxeu/center-common/ui/navigation.ts'
 import { ref } from 'vue'
 import { api } from './core.ts'
 import type { PageData } from './data.ts'
@@ -18,7 +19,7 @@ async function decide(approve: boolean) {
       csrf: props.page.csrf,
       body: { request: props.data.consent.request, approve },
     })) as { redirect: string }
-    location.assign(result.redirect)
+    navigateDocument(result.redirect, 'oauth-consent')
   } catch (err) {
     props.page.report(err)
     busy.value = false

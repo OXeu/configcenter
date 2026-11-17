@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Button from '@oxeu/center-common/ui/Button.vue'
+import { navigateDocument } from '@oxeu/center-common/ui/navigation.ts'
 import NavigationLink from '@oxeu/center-common/ui/NavigationLink.vue'
 import DropdownMenu from '@oxeu/center-common/ui/DropdownMenu.vue'
 import DangerActions from './DangerActions.vue'
@@ -64,7 +65,7 @@ watch(
 )
 async function logout(): Promise<void> {
   await api('/logout', { method: 'POST', csrf: data.csrf })
-  location.assign('/login')
+  navigateDocument('/login', 'sign-out')
 }
 </script>
 

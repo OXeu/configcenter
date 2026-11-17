@@ -2,7 +2,10 @@ import en from '../../../internal/i18n/locales/en.json'
 import zh from '../../../internal/i18n/locales/zh-CN.json'
 
 /** @type {Record<string, Record<string, string>>} */
-export const fallbackMessages: Record<string, Record<string, string>> = { en, 'zh-CN': zh }
+export const fallbackMessages: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  en,
+  'zh-CN': zh,
+}
 
 export type Copy = { msg: (id: string, vars?: Record<string, string>) => string; lang: string }
 

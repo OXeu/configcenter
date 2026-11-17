@@ -92,6 +92,12 @@ Shared `no-restricted-files` lint permits documentation only in top-level `docs/
     - Keep `.tmp/ui` and `.tmp/docs` for subsequent builds; binaries belong in `.tmp/bin`.
     - No generated bundles are committed.
 
+## Navigation and state
+
+Use the shared `createPageApplication` bootstrap, Vue Router links/actions and Pinia for shared state. The shared lint and Vite build guard reject raw navigation, alternative state libraries, module-level reactive singletons and mutable state exports.
+
+Keep component-local state and readonly configuration local. Declare necessary authentication document handoffs by exact source file, reason and target policy in `tools/navigation-policy.json`; do not bypass this boundary with direct browser APIs.
+
 ## Testing
 
 - `go test ./...` — OAuth login through a fake identity provider, project isolation, CSRF.
