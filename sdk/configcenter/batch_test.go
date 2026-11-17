@@ -19,7 +19,7 @@ func TestBatchRemoteReadsAndWrites(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
-		if r.Header.Get("Authorization") != "ApiKey cc_batch" {
+		if r.Header.Get("Authorization") != "Bearer cc_batch" {
 			t.Error("missing API key")
 		}
 		switch r.URL.Path {

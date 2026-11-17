@@ -19,7 +19,7 @@ func keyRequest(t *testing.T, router http.Handler, token, method, path string, b
 		t.Fatal(err)
 	}
 	req := httptest.NewRequest(method, path, strings.NewReader(string(encoded)))
-	req.Header.Set("Authorization", "ApiKey "+token)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)

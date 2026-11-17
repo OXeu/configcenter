@@ -134,7 +134,7 @@ func (c *Client) putMany(ctx context.Context, values map[string]string) error {
 	if err != nil {
 		return fmt.Errorf("build batch write request: %w", err)
 	}
-	req.Header.Set("Authorization", "ApiKey "+c.apiKey)
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.http.Do(req)
 	if err != nil {

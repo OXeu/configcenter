@@ -10,7 +10,7 @@ import (
 func TestPutUsesBoundProjectAndExplicitWritePermission(t *testing.T) {
 	writes := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "ApiKey cc_test" {
+		if r.Header.Get("Authorization") != "Bearer cc_test" {
 			t.Error("missing SDK authentication")
 		}
 		switch r.URL.Path {

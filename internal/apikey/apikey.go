@@ -14,7 +14,7 @@ const (
 	keyBytes = 32
 )
 
-// ErrMalformed is returned for headers that do not carry an ApiKey credential.
+// ErrMalformed is returned for headers that do not carry a Bearer credential.
 var ErrMalformed = errors.New("malformed api key header")
 
 // Generate returns a plaintext bearer token and the digest persisted with it.
@@ -40,14 +40,14 @@ func Display(token string) string {
 	return token[:len(prefix)+6] + "…"
 }
 
-// ParseHeader extracts the token from an `Authorization: ApiKey <token>` header.
+// ParseHeader extracts the token from an `Authorization: Bearer <token>` header.
 func ParseHeader(header string) (string, error) {
 	scheme, rest, ok := strings.Cut(strings.TrimSpace(header), " ")
-	if !ok || !strings.EqualFold(scheme, "ApiKey") {
+	if !ok || !strings.EqualFold(scheme, "Bearer") {
 		return "", ErrMalformed
 	}
 	token := strings.TrimSpace(rest)
-	if !strings.HasPrefix(token, prefix) {
+	if !strings.HasPrefix(token, prefix) || len(token) == len(prefix) || strings.ContainsAny(token, " \t\r\n") {
 		return "", ErrMalformed
 	}
 	return token, nil

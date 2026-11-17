@@ -100,7 +100,7 @@ func TestScopedKeyAttributionAndExplicitAuthentication(t *testing.T) {
 	}{{token, http.StatusOK}, {"cc_invalid", http.StatusUnauthorized}} {
 		req := httptest.NewRequest(http.MethodPut, "/api/v1/projects/audit/environments/production/items/value", strings.NewReader(`{"value":"30"}`))
 		req.AddCookie(&http.Cookie{Name: "cc_session", Value: "admin-session"})
-		req.Header.Set("Authorization", "ApiKey "+tc.credential)
+		req.Header.Set("Authorization", "Bearer "+tc.credential)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		if rec.Code != tc.status {

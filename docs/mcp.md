@@ -7,7 +7,7 @@
 统一地址为 `POST /mcp`，接收 JSON-RPC 2.0。MCP 覆盖全部 28 项 HTTP API 操作：身份、scope 查询、项目、环境、配置、变更提案、API Key、用户和系统设置。项目由每次工具调用的 `project` 参数选择，可以在同一连接中管理多个项目。
 
 ```http
-Authorization: ApiKey cc_REPLACE_WITH_YOUR_KEY
+Authorization: Bearer cc_REPLACE_WITH_YOUR_KEY
 Content-Type: application/json
 Accept: application/json, text/event-stream
 MCP-Protocol-Version: 2025-06-18
@@ -25,7 +25,7 @@ API Key 的每项 scope 绑定项目与操作权限，`project: "*"` 覆盖所�
 
 ```sh
 curl --fail-with-body --silent --show-error \
-  -H "Authorization: ApiKey $CC_KEY" \
+  -H "Authorization: Bearer $CC_KEY" \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   "$CC_URL/mcp" \

@@ -146,7 +146,7 @@ func TestWebAndAgentFlowsAreProjectScoped(t *testing.T) {
 			t.Fatalf("marshal: %v", err)
 		}
 		req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(string(body)))
-		req.Header.Set("Authorization", "ApiKey "+token)
+		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
 		f.router.ServeHTTP(w, req)
 		var reply map[string]any

@@ -12,7 +12,7 @@ func TestLoadUsesEnvironmentPathAndKey(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/agent/environments/production/values", func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("Authorization"); got != "ApiKey cc_test" {
+		if got := r.Header.Get("Authorization"); got != "Bearer cc_test" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

@@ -245,7 +245,7 @@ func TestMCPValidationAndAuthentication(t *testing.T) {
 	}
 	for _, payload := range []string{`{`, `{} {}`, `[]`} {
 		req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(payload))
-		req.Header.Set("Authorization", "ApiKey "+token)
+		req.Header.Set("Authorization", "Bearer "+token)
 		rec := httptest.NewRecorder()
 		f.router.ServeHTTP(rec, req)
 		if rec.Code != http.StatusBadRequest {
@@ -269,7 +269,7 @@ func TestMCPValidationAndAuthentication(t *testing.T) {
 		}
 		req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(string(encoded)))
 		req.AddCookie(f.cookies["cc_session"])
-		req.Header.Set("Authorization", "ApiKey "+credential)
+		req.Header.Set("Authorization", "Bearer "+credential)
 		rec := httptest.NewRecorder()
 		f.router.ServeHTTP(rec, req)
 		want := http.StatusOK
@@ -301,7 +301,7 @@ func TestMCPTransport(t *testing.T) {
 		{http.MethodGet, "https://untrusted.example", "", http.StatusForbidden},
 	} {
 		req := httptest.NewRequest(tc.method, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
-		req.Header.Set("Authorization", "ApiKey "+token)
+		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Origin", tc.origin)
 		req.Header.Set("MCP-Protocol-Version", tc.version)
 		rec := httptest.NewRecorder()

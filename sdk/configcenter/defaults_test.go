@@ -26,7 +26,7 @@ func TestEnsureDefaultsRemoteUsesBatchReadAndWrite(t *testing.T) {
 		case "/api/v1/agent/project":
 			json.NewEncoder(w).Encode(map[string]any{"project": map[string]string{"slug": "app"}})
 		case "/api/v1/projects/app/environments/production/items":
-			if r.Method != http.MethodPut || r.Header.Get("Authorization") != "ApiKey cc_test" {
+			if r.Method != http.MethodPut || r.Header.Get("Authorization") != "Bearer cc_test" {
 				t.Error("invalid initializer request")
 			}
 			var in struct {

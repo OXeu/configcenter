@@ -58,7 +58,7 @@ func (c *Client) put(ctx context.Context, key, value string) error {
 	if err != nil {
 		return fmt.Errorf("configcenter: create write request: %w", err)
 	}
-	req.Header.Set("Authorization", "ApiKey "+c.apiKey)
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.http.Do(req)
 	if err != nil {

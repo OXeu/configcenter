@@ -23,7 +23,7 @@ MCP 的 `list_config` 和 `list_values` 接受 `keys` 字符串数组，`set_con
 
 ## 认证与 scope
 
-请求携带 `Authorization: ApiKey cc_…`。所有 API Key 使用 scope 权限模型。
+请求携带 `Authorization: Bearer cc_…`。所有 API Key 使用 scope 权限模型。
 
 每把 Key 的 `scopes` 是一组“项目范围 + 操作权限”。同一把 Key 可以只读取项目 A，同时写入项目 B；`project: "*"` 表示所有项目（包括以后创建的项目）。权限需要逐项授权，写入不自动包含读取或删除。
 
@@ -80,7 +80,7 @@ MCP 的 `list_config` 和 `list_values` 接受 `keys` 字符串数组，`set_con
 
 ```sh
 curl --fail-with-body --silent --show-error --get \
-  -H "Authorization: ApiKey $CC_KEY" \
+  -H "Authorization: Bearer $CC_KEY" \
   --data-urlencode 'project=billing' \
   --data-urlencode 'prefix=db.' \
   "$CC_URL/api/v1/agent/environments/production/values"
@@ -132,7 +132,7 @@ curl --fail-with-body --silent --show-error --get \
 
 ```sh
 curl --fail-with-body --silent --show-error \
-  -H "Authorization: ApiKey $CC_KEY" \
+  -H "Authorization: Bearer $CC_KEY" \
   -H 'Content-Type: application/json' \
   -X PUT "$CC_URL/api/v1/projects/shipping/environments/production/items/db.pool" \
   --data '{"value":"20","description":"数据库连接池大小"}'
