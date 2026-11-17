@@ -3,6 +3,7 @@ import { reactive } from 'vue'
 import { api } from './core.ts'
 import { createForm } from './forms.ts'
 import { notify } from './toast.ts'
+import { createSecretViews, type SecretRow } from './secrets.ts'
 
 /** @param {string} value */
 const enc = (value: string) => encodeURIComponent(value)
@@ -27,6 +28,17 @@ export function createWorkspace(
     globalPermissions: [] as string[],
   })
   const base = '/api/v1/projects/' + encodeURIComponent(data.project?.slug ?? '')
+  function revealURL(row: SecretRow) {
+    if (data.page === 'settings')
+      return '/api/v1/projects/configcenter/environments/production/items/allow_registration/reveal'
+    if (state.tab === 'proposals') return `${base}/proposals/${row.id}/reveal`
+    return `${base}/environments/${enc(state.env)}/items/${enc(row.key)}/reveal`
+  }
+  async function readSecret(url: string): Promise<string> {
+    const result = (await api(url, { method: 'POST', csrf: page.csrf })) as { value: string }
+    return result.value
+  }
+  const secrets = createSecretViews((row) => readSecret(revealURL(row)), page.report)
   const path = () =>
     state.tab === 'keys'
       ? '/api/v1/keys'
@@ -41,6 +53,7 @@ export function createWorkspace(
               : `${base}/${state.tab}`
   /** @returns {Promise<void>} */
   async function load(): Promise<void> {
+    secrets.reset()
     state.busy = true
     try {
       if (data.page === 'project')
@@ -118,14 +131,17 @@ export function createWorkspace(
           {
             key: 'allowed',
             label: 'settings.registration',
+            required: true,
             options: [
               { value: 'true', label: page.msg('settings.allowed') },
               { value: 'false', label: page.msg('settings.closed') },
             ],
           },
         ],
-        { allowed: String(row.value) },
+        { allowed: row.secret ? '' : String(row.value) },
         async () => {
+          if (!['true', 'false'].includes(form.values.allowed))
+            throw new Error(page.msg('settings.chooseRegistration'), { cause: 422 })
           await mutate(path(), 'PUT', { allow_registration: form.values.allowed === 'true' })
         },
       )
@@ -159,17 +175,31 @@ export function createWorkspace(
     } else {
       fields = [
         field('key', 'dialog.itemKey'),
-        { ...field('value', 'dialog.itemValue', false), multiline: true },
+        { ...field('value', 'dialog.itemValue', false), multiline: true, sensitive: true },
         field('description', 'common.description', false),
       ]
-      values = row ?? { key: '', value: '', description: '' }
+      values = {
+        key: row?.key ?? '',
+        value: row?.secret ? '' : (row?.value ?? ''),
+        description: row?.description ?? '',
+      }
       method = 'PUT'
     }
     form.show(page.msg(editing ? 'common.edit' : 'common.create'), fields, values, async () => {
       const target = method === 'PUT' ? url + '/' + enc(row?.key ?? form.values.key) : url
-      const result = await mutate(target, method, form.values)
+      const body: Record<string, string | boolean> = { ...form.values }
+      if (form.secret !== null) body.secret = form.secret
+      if (form.keepSecret) delete body.value
+      const result = await mutate(target, method, body)
       if (result?.token) form.token = result.token
     })
+    if (data.page === 'project' && state.tab === 'items') form.secret = row?.secret ?? false
+    if (row?.secret && form.secret !== null) {
+      form.keepSecret = true
+      form.secretMask = row.value
+      const revealPath = revealURL(row)
+      form.readSecret = () => readSecret(revealPath)
+    }
   }
   function editKey(row?: {
     id: number
@@ -285,6 +315,7 @@ export function createWorkspace(
     )
   }
   return {
+    secrets,
     toggleView,
     actionsFor,
     state,

@@ -1,17 +1,23 @@
-import { reactive } from 'vue'
+import { reactive, watch } from 'vue'
 
 export type ScopeDraft = { id: number; project: string; permissions: string[] }
 export type Choice = { value: string; label: string }
 
 /** @param {import('./page.ts').PageContext} page */
 export function createForm(page: import('./page.ts').PageContext) {
-  return reactive({
+  const form = reactive({
     open: false,
     danger: false,
     title: '',
     busy: false,
     error: '',
     token: '',
+    secret: null as boolean | null,
+    valueRevealed: false,
+    keepSecret: false,
+    secretMask: '',
+    revealing: false,
+    readSecret: null as (() => Promise<string>) | null,
     scopes: null as ScopeDraft[] | null,
     scopeProjects: [] as Choice[],
     scopePermissions: [] as Choice[],
@@ -34,8 +40,47 @@ export function createForm(page: import('./page.ts').PageContext) {
       this.action = action
       this.error = ''
       this.token = ''
+      this.secret = null
+      this.valueRevealed = false
+      this.keepSecret = false
+      this.secretMask = ''
+      this.revealing = false
+      this.readSecret = null
       this.scopes = null
       this.open = true
+    },
+    async toggleValue() {
+      if (this.busy || this.revealing) return
+      if (this.valueRevealed) {
+        this.valueRevealed = false
+        if (this.keepSecret) this.values.value = ''
+        return
+      }
+      const draft = this.values
+      this.revealing = true
+      try {
+        const value = this.keepSecret && this.readSecret ? await this.readSecret() : draft.value
+        if (this.open && draft === this.values) {
+          this.values.value = value
+          this.valueRevealed = true
+        }
+      } catch (error) {
+        if (this.open && draft === this.values) page.report(error)
+      } finally {
+        if (draft === this.values) this.revealing = false
+      }
+    },
+    replaceValue() {
+      this.keepSecret = false
+      this.secretMask = ''
+      this.values.value = ''
+      this.valueRevealed = true
+    },
+    touch(key: string) {
+      if (key === 'value') {
+        this.keepSecret = false
+        this.secretMask = ''
+      }
     },
     addScope() {
       if (this.busy || this.scopes === null) return
@@ -59,7 +104,7 @@ export function createForm(page: import('./page.ts').PageContext) {
       this.scopes = this.scopes.filter((scope) => scope.id !== id)
     },
     async submit() {
-      if (this.busy) return
+      if (this.busy || this.revealing) return
       this.busy = true
       this.error = ''
       try {
@@ -72,4 +117,16 @@ export function createForm(page: import('./page.ts').PageContext) {
       }
     },
   })
+  watch(
+    () => form.open,
+    (open) => {
+      if (!open && form.secret !== null) {
+        form.values = {}
+        form.readSecret = null
+        form.valueRevealed = false
+      }
+    },
+    { flush: 'sync' },
+  )
+  return form
 }

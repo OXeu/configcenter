@@ -4,7 +4,7 @@
 
 ## 地址与认证
 
-统一地址为 `POST /mcp`，接收 JSON-RPC 2.0。MCP 覆盖全部 28 项 HTTP API 操作：身份、scope 查询、项目、环境、配置、变更提案、API Key、用户和系统设置。项目由每次工具调用的 `project` 参数选择，可以在同一连接中管理多个项目。
+统一地址为 `POST /mcp`，接收 JSON-RPC 2.0。MCP 提供 28 项非明文读取与管理操作：身份、scope 查询、项目、环境、配置、变更提案、API Key、用户和系统设置。项目由每次工具调用的 `project` 参数选择，可以在同一连接中管理多个项目。
 
 ```http
 Authorization: Bearer cc_REPLACE_WITH_YOUR_KEY
@@ -16,6 +16,12 @@ MCP-Protocol-Version: 2025-06-18
 API Key 的每项 scope 绑定项目与操作权限，`project: "*"` 覆盖所有项目（包括未来创建的项目）。用户管理和系统设置权限只能配置在 `*` 范围。权限逐项授权，写入不自动包含读取或删除。完整权限表和 Key 创建方式见 [HTTP API](/docs/api)。
 
 浏览器会话也可调用管理工具，每次 POST 必须携带 `X-CSRF-Token`。普通用户只能管理自己的项目和 Key；用户管理、系统设置需要管理员身份。`get_project` 与 `list_values` 对应 SDK 接口，要求 API Key 或 MCP OAuth 令牌。显式提供 Authorization 后不会回退到浏览器会话。外部 Agent 可使用 API Key 或下述 OAuth 登录，不需要 Cookie 或 CSRF Token。旧的 `Authorization: ApiKey …` 已不再接受，现有 Key 的值无需更换。
+
+## 密钥字段
+
+`set_config`、`set_configs` 的每个 item，以及 `propose_config` 支持 `secret: true`。省略该标记会保留已有密钥保护，提案自动继承目标字段的保护。MCP 禁止传入 `secret: false`，不能通过重命名、批量写入或提案取消保护。
+
+所有 MCP 配置读取、写入回包及提案回包中的密钥值都是掩码，例如 `sk-****x123`，并带有 `secret: true` 和 `masked: true`。短值统一显示为 `****`。`config:read` 只允许普通读取；`config:read-secrets` 仅用于 [HTTP API 的专用明文接口](/docs/api)，不会开放任何 MCP 明文读取能力。即使使用管理员 OAuth 或包含特权 scope 的 API Key，MCP 仍只返回掩码。
 
 ## OAuth 授权登录
 
@@ -111,7 +117,7 @@ curl --fail-with-body --silent --show-error \
 
 发现结果按当前凭据的 scope 过滤：在任意授权项目有对应权限时，该项目工具就会出现；调用时仍按实际 `project` 校验。需要多个权限的工具必须在同一个项目具备全部权限，不会将不同项目的权限合并。直接调用未列出的工具同样会检查权限。scope 修改后立即影响后续请求，客户端可重新调用 `tools/list` 刷新列表。
 
-所有参数位于 `params.arguments`，未知字段、缺失必填字段、错误类型或枚举值会被拒绝。下表除特别说明外均为字符串；`id` 是正整数，`approve` 和 `allow_registration` 是布尔值，`scopes` 是数组。
+所有参数位于 `params.arguments`，未知字段、缺失必填字段、错误类型或枚举值会被拒绝。下表除特别说明外均为字符串；`id` 是正整数，`approve`、`allow_registration` 和 `secret` 是布尔值，`scopes` 是数组。
 
 | 工具                 | 必填参数                                  | 可选参数                                     | scope                                  |
 | -------------------- | ----------------------------------------- | -------------------------------------------- | -------------------------------------- |
@@ -126,11 +132,11 @@ curl --fail-with-body --silent --show-error \
 | `delete_environment` | `project`、`environment`                  | 无                                           | `environments:delete`                  |
 | `list_config`        | `project`、`environment`                  | `prefix`、`keys`                             | `config:read`                          |
 | `get_config`         | `project`、`environment`、`key`           | 无                                           | `config:read`                          |
-| `set_config`         | `project`、`environment`、`key`、`value`  | `description`、`new_key`                     | `config:write`                         |
+| `set_config`         | `project`、`environment`、`key`、`value`  | `description`、`new_key`、`secret`           | `config:write`                         |
 | `set_configs`        | `project`、`environment`、`items`         | —                                            | `config:write`                         |
 | `delete_config`      | `project`、`environment`、`key`           | 无                                           | `config:delete`                        |
 | `list_proposals`     | `project`                                 | `status`（`pending`、`applied`、`rejected`） | `proposals:read`                       |
-| `propose_config`     | `project`、`environment`、`key`、`action` | `value`（`set` 时必填）、`reason`            | `proposals:write`                      |
+| `propose_config`     | `project`、`environment`、`key`、`action` | `value`（`set` 时必填）、`reason`、`secret`  | `proposals:write`                      |
 | `review_proposal`    | `project`、`id`、`approve`                | 无                                           | `proposals:review`                     |
 | `list_keys`          | 无                                        | `project`                                    | `keys:read`                            |
 | `create_key`         | `name`、`scopes`                          | `expires_at`（RFC 3339）                     | `keys:write`                           |

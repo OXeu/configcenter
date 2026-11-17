@@ -22,7 +22,20 @@ func (s *Server) apiGetItem(c *gin.Context, project store.Project) {
 		s.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, toItemJSON(item))
+	c.JSON(http.StatusOK, toItemJSON(c, item))
+}
+
+func allowSecretInput(c *gin.Context, secret *bool) bool {
+	if secret != nil && !*secret {
+		id, _ := auth.FromContext(c.Request.Context())
+		project, ok := c.Get("cc_project")
+		p, valid := project.(store.Project)
+		if c.GetBool("cc_mcp") || !ok || !valid || !id.Allows(p.ID, store.ConfigReadSecrets) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "secret protection requires privileged access"})
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Server) apiCreateProposal(c *gin.Context, project store.Project) {
@@ -31,10 +44,14 @@ func (s *Server) apiCreateProposal(c *gin.Context, project store.Project) {
 		Key         string  `json:"key"`
 		Action      string  `json:"action"`
 		Value       *string `json:"value"`
+		Secret      *bool   `json:"secret"`
 		Reason      string  `json:"reason"`
 	}
 	if err := bindJSON(c, &in); err != nil {
 		s.fail(c, err)
+		return
+	}
+	if !allowSecretInput(c, in.Secret) {
 		return
 	}
 	if err := slug.ValidateKey(in.Key); err != nil {
@@ -61,6 +78,7 @@ func (s *Server) apiCreateProposal(c *gin.Context, project store.Project) {
 	if in.Action == store.ActionSet {
 		proposal.Value = in.Value
 	}
+	proposal.Secret = in.Secret != nil && *in.Secret
 	created, err := s.store.CreateProposal(c.Request.Context(), proposal)
 	if err != nil {
 		s.fail(c, err)

@@ -20,6 +20,9 @@ func (s *Server) MountAPI(r *gin.Engine) {
 	management := r.Group("/api/v1", s.authenticator.ManagementMiddleware())
 	for _, op := range s.apiOperations() {
 		handlers := []gin.HandlerFunc{}
+		if op.RESTOnly {
+			handlers = append(handlers, requireSecretReadPath)
+		}
 		switch {
 		case op.Agent:
 			handlers = append(handlers, s.authenticator.BearerMiddleware())
@@ -27,7 +30,7 @@ func (s *Server) MountAPI(r *gin.Engine) {
 				handlers = append(handlers, auth.RequireScope(permission))
 			}
 		case op.ProjectHandler != nil:
-			handlers = append(handlers, s.withProject(op.Permissions[0], op.ProjectHandler))
+			handlers = append(handlers, s.withProject(op.Permissions, op.ProjectHandler))
 		default:
 			handlers = append(handlers, op.authorize)
 		}
@@ -39,7 +42,7 @@ func (s *Server) MountAPI(r *gin.Engine) {
 }
 
 // withProject resolves the :project route parameter before the handler runs.
-func (s *Server) withProject(permission store.Permission, fn func(*gin.Context, store.Project)) gin.HandlerFunc {
+func (s *Server) withProject(permissions []store.Permission, fn func(*gin.Context, store.Project)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		project, err := s.store.ProjectBySlug(c.Request.Context(), c.Param("project"))
 		if err != nil {
@@ -50,9 +53,11 @@ func (s *Server) withProject(permission store.Permission, fn func(*gin.Context, 
 			return
 		}
 		id, _ := auth.FromContext(c.Request.Context())
-		if !id.Allows(project.ID, permission) {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient api key scope"})
-			return
+		for _, permission := range permissions {
+			if !id.Allows(project.ID, permission) {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient api key scope"})
+				return
+			}
 		}
 		c.Set("cc_project", project)
 		fn(c, project)
@@ -109,12 +114,19 @@ func toEnvJSON(e store.Environment) envJSON {
 type itemJSON struct {
 	Key         string    `json:"key"`
 	Value       string    `json:"value"`
+	Secret      bool      `json:"secret"`
+	Masked      bool      `json:"masked"`
 	Description string    `json:"description"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-func toItemJSON(i store.ConfigItem) itemJSON {
-	return itemJSON{Key: i.Key, Value: i.Value, Description: i.Description, UpdatedAt: i.UpdatedAt}
+func toItemJSON(c *gin.Context, i store.ConfigItem) itemJSON {
+	value := i.Value
+	masked := i.Secret && (!c.GetBool("cc_reveal") || c.GetBool("cc_mcp"))
+	if masked {
+		value = maskSecret(value)
+	}
+	return itemJSON{Key: i.Key, Value: value, Secret: i.Secret, Masked: masked, Description: i.Description, UpdatedAt: i.UpdatedAt}
 }
 
 // apiMe returns the signed-in user and the CSRF token of the session.
@@ -272,7 +284,7 @@ func (s *Server) resolveEnv(c *gin.Context, project store.Project) (store.Enviro
 func (s *Server) itemsResponse(c *gin.Context, project store.Project, env store.Environment, items []store.ConfigItem) {
 	out := make([]itemJSON, 0, len(items))
 	for _, item := range items {
-		out = append(out, toItemJSON(item))
+		out = append(out, toItemJSON(c, item))
 	}
 	c.JSON(http.StatusOK, gin.H{"project": project.Slug, "environment": env.Slug, "items": out})
 }
@@ -288,6 +300,7 @@ func (s *Server) apiListItems(c *gin.Context, project store.Project) {
 type itemInput struct {
 	Key         string  `json:"key"`
 	Value       *string `json:"value"`
+	Secret      *bool   `json:"secret"`
 	Description string  `json:"description"`
 }
 
@@ -301,8 +314,7 @@ func (s *Server) apiPutItem(c *gin.Context, project store.Project) {
 		s.fail(c, err)
 		return
 	}
-	if in.Value == nil {
-		s.fail(c, fmt.Errorf("%w: value is required", errBadRequest))
+	if !allowSecretInput(c, in.Secret) {
 		return
 	}
 	key := c.Param("key")
@@ -310,28 +322,46 @@ func (s *Server) apiPutItem(c *gin.Context, project store.Project) {
 		s.fail(c, err)
 		return
 	}
-	if in.Key != "" && in.Key != key {
+	if in.Key != "" {
 		if err := slug.ValidateKey(in.Key); err != nil {
 			s.fail(c, err)
 			return
 		}
-		if err := s.store.RenameItem(c.Request.Context(), project.ID, env.ID, key, in.Key); err != nil && !errors.Is(err, store.ErrNotFound) {
-			s.fail(c, err)
-			return
-		}
-		key = in.Key
 	}
 	id, _ := auth.FromContext(c.Request.Context())
-	userID := id.ActorID()
-	item, err := s.store.PutItem(c.Request.Context(), store.ConfigItem{
-		ProjectID: project.ID, EnvironmentID: env.ID, Key: key, Value: *in.Value,
-		Description: in.Description, UpdatedBy: userID,
+	var item store.ConfigItem
+	err := s.store.Transaction(c.Request.Context(), func(tx *store.Store) error {
+		if in.Value == nil {
+			current, err := tx.GetItem(c.Request.Context(), project.ID, env.ID, key)
+			if err != nil {
+				return fmt.Errorf("load unchanged secret: %w", err)
+			}
+			if !current.Secret {
+				return fmt.Errorf("%w: value is required", errBadRequest)
+			}
+			in.Value = &current.Value
+		}
+		if in.Key != "" && in.Key != key {
+			if err := tx.RenameItem(c.Request.Context(), project.ID, env.ID, key, in.Key); err != nil && !errors.Is(err, store.ErrNotFound) {
+				return fmt.Errorf("rename configuration: %w", err)
+			}
+			key = in.Key
+		}
+		var err error
+		item, err = tx.PutItem(c.Request.Context(), store.ItemInput{
+			ProjectID: project.ID, EnvironmentID: env.ID, Key: key, Value: *in.Value,
+			Description: in.Description, Secret: in.Secret, UpdatedBy: id.ActorID(),
+		})
+		if err != nil {
+			return fmt.Errorf("save configuration: %w", err)
+		}
+		return nil
 	})
 	if err != nil {
 		s.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, toItemJSON(item))
+	c.JSON(http.StatusOK, toItemJSON(c, item))
 }
 
 func (s *Server) apiDeleteItem(c *gin.Context, project store.Project) {
@@ -432,6 +462,8 @@ type proposalJSON struct {
 	Key         string     `json:"key"`
 	Action      string     `json:"action"`
 	Value       *string    `json:"value"`
+	Secret      bool       `json:"secret"`
+	Masked      bool       `json:"masked"`
 	Reason      string     `json:"reason"`
 	Status      string     `json:"status"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -449,9 +481,14 @@ func (s *Server) proposalViews(c *gin.Context, project store.Project, ps []store
 	}
 	out := make([]proposalJSON, 0, len(ps))
 	for _, p := range ps {
+		value := p.Value
+		if p.Secret && value != nil {
+			masked := maskSecret(*value)
+			value = &masked
+		}
 		out = append(out, proposalJSON{
 			ID: p.ID, Environment: byID[p.EnvironmentID], Key: p.Key, Action: p.Action,
-			Value: p.Value, Reason: p.Reason, Status: p.Status, CreatedAt: p.CreatedAt, ReviewedAt: p.ReviewedAt,
+			Value: value, Secret: p.Secret, Masked: p.Secret, Reason: p.Reason, Status: p.Status, CreatedAt: p.CreatedAt, ReviewedAt: p.ReviewedAt,
 		})
 	}
 	return out, nil

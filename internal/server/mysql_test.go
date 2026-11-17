@@ -37,7 +37,7 @@ func TestMySQLStore(t *testing.T) {
 	if err != nil || len(envs) != 1 {
 		t.Fatalf("environments: %v, %v", envs, err)
 	}
-	item := store.ConfigItem{ProjectID: project.ID, EnvironmentID: envs[0].ID, Key: "key", Value: strings.Repeat("x", 70000)}
+	item := store.ItemInput{ProjectID: project.ID, EnvironmentID: envs[0].ID, Key: "key", Value: strings.Repeat("x", 70000)}
 	if _, err := st.PutItem(ctx, item); err != nil {
 		t.Fatal(err)
 	}

@@ -47,6 +47,10 @@ func (s *Server) MountMCP(r *gin.Engine) {
 	s.mcpAPI = gin.New()
 	s.mcpAPI.UseRawPath = true
 	s.mcpAPI.UnescapePathValues = true
+	s.mcpAPI.Use(func(c *gin.Context) {
+		c.Set("cc_mcp", true)
+		c.Next()
+	})
 	s.mcpAPI.Use(s.authenticator.BrowserMiddleware())
 	s.MountAPI(s.mcpAPI)
 	metadataURL := ""
@@ -179,7 +183,7 @@ func (s *Server) mcpTools(c *gin.Context) []mcpTool {
 	id, _ := auth.FromContext(c.Request.Context())
 	out := []mcpTool{}
 	for _, op := range s.apiOperations() {
-		if op.allowed(id) {
+		if !op.RESTOnly && op.allowed(id) {
 			out = append(out, mcpTool{Name: op.Name, Description: op.Description, InputSchema: op.inputSchema()})
 		}
 	}
@@ -188,7 +192,7 @@ func (s *Server) mcpTools(c *gin.Context) []mcpTool {
 
 func (s *Server) callTool(c *gin.Context, name string, args map[string]any) (any, *rpcError) {
 	for _, op := range s.apiOperations() {
-		if op.Name != name {
+		if op.RESTOnly || op.Name != name {
 			continue
 		}
 		if args == nil {

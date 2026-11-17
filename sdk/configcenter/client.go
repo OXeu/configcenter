@@ -42,6 +42,8 @@ type Config struct {
 	BaseURL string
 	// APIKey is the token created on the project's API keys page.
 	APIKey string
+	// RevealSecrets opts into the privileged read path requiring config:read-secrets.
+	RevealSecrets bool
 	// Environment is the default environment slug; empty means production.
 	Environment string
 	// HTTPClient overrides the default client.
@@ -54,6 +56,8 @@ type Config struct {
 type Item struct {
 	Key         string    `json:"key"`
 	Value       string    `json:"value"`
+	Secret      bool      `json:"secret"`
+	Masked      bool      `json:"masked"`
 	Description string    `json:"description"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -67,11 +71,12 @@ type WatchOptions struct {
 
 // Client accesses a remote project with an isolated, expiring memory cache.
 type Client struct {
-	sources  Sources
-	endpoint string
-	apiKey   string
-	env      string
-	http     *http.Client
+	sources       Sources
+	endpoint      string
+	apiKey        string
+	revealSecrets bool
+	env           string
+	http          *http.Client
 
 	opMu      sync.Mutex
 	mu        sync.RWMutex
@@ -118,10 +123,11 @@ func New(cfg Config) (*Client, error) {
 
 func newClient(cfg Config, env, endpoint string, client *http.Client) *Client {
 	c := &Client{
-		endpoint: endpoint,
-		apiKey:   cfg.APIKey,
-		env:      env,
-		http:     client,
+		endpoint:      endpoint,
+		apiKey:        cfg.APIKey,
+		revealSecrets: cfg.RevealSecrets,
+		env:           env,
+		http:          client,
 		cache: memoryCache{
 			entries:  make(map[string]cacheEntry),
 			prefixes: make(map[string]time.Time),
@@ -143,6 +149,14 @@ func (c *Client) IsLocal() bool { return c.endpoint == "" }
 // Environment returns the environment slug the client reads.
 func (c *Client) Environment() string {
 	return c.env
+}
+
+func (c *Client) valuesPath() string {
+	path := "/environments/" + url.PathEscape(c.env) + "/values"
+	if c.revealSecrets {
+		path += "/reveal"
+	}
+	return path
 }
 
 // Load merges all sources by priority and replaces the snapshot.

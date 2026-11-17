@@ -74,6 +74,7 @@ type ConfigItem struct {
 	EnvironmentID uint   `gorm:"uniqueIndex:item_scope;not null"`
 	Key           string `gorm:"uniqueIndex:item_scope;size:191;not null"`
 	Value         string `gorm:"type:longtext;not null"`
+	Secret        bool   `gorm:"not null;default:false"`
 	Description   string
 	UpdatedBy     uint      `gorm:"not null"`
 	CreatedAt     time.Time `gorm:"not null"`
@@ -87,6 +88,7 @@ type MCPProposal struct {
 	EnvironmentID uint    `gorm:"not null"`
 	Key           string  `gorm:"size:191;not null"`
 	Value         *string `gorm:"type:text"`
+	Secret        bool    `gorm:"not null;default:false"`
 	Action        string  `gorm:"not null"`
 	Reason        string
 	Status        string    `gorm:"index;not null"`

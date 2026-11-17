@@ -54,7 +54,7 @@ func (s *Server) readItems(c *gin.Context, project store.Project, env store.Envi
 	out := make([]itemJSON, 0, len(items))
 	found := make(map[string]bool, len(items))
 	for _, item := range items {
-		out = append(out, toItemJSON(item))
+		out = append(out, toItemJSON(c, item))
 		found[item.Key] = true
 	}
 	missing := []string{}
@@ -81,6 +81,9 @@ func (s *Server) apiPutItems(c *gin.Context, project store.Project) {
 	}
 	keys := make([]string, 0, len(input.Items))
 	for _, item := range input.Items {
+		if !allowSecretInput(c, item.Secret) {
+			return
+		}
 		keys = append(keys, item.Key)
 		if item.Value == nil {
 			s.fail(c, fmt.Errorf("%w: key %q requires value", errBadRequest, item.Key))
@@ -92,9 +95,9 @@ func (s *Server) apiPutItems(c *gin.Context, project store.Project) {
 		return
 	}
 	identity, _ := auth.FromContext(c.Request.Context())
-	items := make([]store.ConfigItem, 0, len(input.Items))
+	items := make([]store.ItemInput, 0, len(input.Items))
 	for _, item := range input.Items {
-		items = append(items, store.ConfigItem{ProjectID: project.ID, EnvironmentID: env.ID, Key: item.Key, Value: *item.Value, Description: item.Description, UpdatedBy: identity.ActorID()})
+		items = append(items, store.ItemInput{ProjectID: project.ID, EnvironmentID: env.ID, Key: item.Key, Value: *item.Value, Secret: item.Secret, Description: item.Description, UpdatedBy: identity.ActorID()})
 	}
 	if err := s.store.PutItems(c.Request.Context(), items); err != nil {
 		s.fail(c, err)

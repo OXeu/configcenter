@@ -1,5 +1,5 @@
 <script setup>
-import { computed, defineAsyncComponent, onMounted } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted } from 'vue'
 import DangerActions from './DangerActions.vue'
 const DialogPanel = defineAsyncComponent(() => import('./DialogPanel.vue'))
 import { createWorkspace } from './workspace.ts'
@@ -12,8 +12,30 @@ const props = defineProps({
 const data = /** @type {import('./data.ts').PageData} */ (props.data)
 const page = /** @type {import('./page.ts').PageContext} */ (props.page)
 const { msg } = page
-const { state, form, refresh, select, edit, toggleView, actionsFor, environment, newEnvironment } =
-  createWorkspace(data, page)
+const {
+  state,
+  form,
+  secrets,
+  refresh,
+  select,
+  edit,
+  toggleView,
+  actionsFor,
+  environment,
+  newEnvironment,
+} = createWorkspace(data, page)
+/** @param {any} row @param {string} column */
+function isSecret(row, column) {
+  return column === 'value' && row.secret && row.value !== null
+}
+/** @param {any} row */
+function isRevealed(row) {
+  return secrets.values.has(row)
+}
+/** @param {any} row */
+function secretLabel(row) {
+  return msg(isRevealed(row) ? 'secret.hideValue' : 'secret.showValue', { key: row.key })
+}
 const canCreate = computed(
   () =>
     data.canWrite && data.page !== 'users' && data.page !== 'settings' && state.tab !== 'proposals',
@@ -49,6 +71,7 @@ const labels = {
 }
 /** @param {any} row @param {string} column */
 function cell(row, column) {
+  if (isSecret(row, column)) return secrets.values.get(row) ?? row.value
   if (data.page === 'settings')
     return msg(
       column === 'key'
@@ -74,6 +97,12 @@ function scopeText(scopes) {
     .join('\n')
 }
 onMounted(refresh)
+onUnmounted(() => {
+  secrets.reset()
+  form.open = false
+  form.values = {}
+  form.readSecret = null
+})
 </script>
 <template>
   <p v-if="data.page === 'keys'" class="mt-2 text-sm text-muted-foreground">
@@ -134,6 +163,17 @@ onMounted(refresh)
               >{{ row.name }}</a
             >
             <span v-else class="whitespace-pre-wrap break-all">{{ cell(row, column) }}</span>
+            <button
+              v-if="isSecret(row, column)"
+              type="button"
+              class="btn-ghost"
+              :aria-label="secretLabel(row)"
+              :aria-pressed="isRevealed(row)"
+              :disabled="secrets.pending.has(row)"
+              @click="secrets.toggle(row)"
+            >
+              {{ msg(isRevealed(row) ? 'secret.hide' : 'secret.show') }}
+            </button>
           </td>
           <td v-if="data.canWrite || data.isAdmin" :data-label="msg('common.actions')">
             <button v-if="!reviewing" class="btn-ghost" :disabled="state.busy" @click="edit(row)">

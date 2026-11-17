@@ -46,7 +46,7 @@ describe('workspace mutations', () => {
     expect(fetchMock.mock.calls[0][1]).toMatchObject({
       method: 'PUT',
       headers: { 'X-CSRF-Token': 'csrf' },
-      body: JSON.stringify({ key: 'new.key', value: 'two', description: '' }),
+      body: JSON.stringify({ key: 'new.key', value: 'two', description: '', secret: false }),
     })
     expect(w.form.open).toBe(false)
   })

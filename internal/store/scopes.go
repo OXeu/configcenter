@@ -13,6 +13,7 @@ const (
 	EnvironmentsWrite  Permission = "environments:write"
 	EnvironmentsDelete Permission = "environments:delete"
 	ConfigRead         Permission = "config:read"
+	ConfigReadSecrets  Permission = "config:read-secrets"
 	ConfigWrite        Permission = "config:write"
 	ConfigDelete       Permission = "config:delete"
 	ProposalsRead      Permission = "proposals:read"
@@ -38,7 +39,7 @@ func KeyPermissions() []Permission {
 	return []Permission{
 		ProjectsRead, ProjectsWrite, ProjectsDelete,
 		EnvironmentsRead, EnvironmentsWrite, EnvironmentsDelete,
-		ConfigRead, ConfigWrite, ConfigDelete,
+		ConfigRead, ConfigReadSecrets, ConfigWrite, ConfigDelete,
 		ProposalsRead, ProposalsWrite, ProposalsReview, KeysRead, KeysWrite,
 		UsersRead, UsersWrite, UsersDelete, SettingsRead, SettingsWrite,
 	}

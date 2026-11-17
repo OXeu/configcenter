@@ -8,6 +8,7 @@ import (
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 )
 
 // ErrNotFound is returned when a scoped lookup finds no row.
@@ -332,30 +333,58 @@ func (s *Store) GetItem(ctx context.Context, projectID, envID uint, key string) 
 	return item, queryErr("load item", err)
 }
 
+func (s *Store) itemForUpdate(ctx context.Context, projectID, envID uint, key string) (ConfigItem, error) {
+	var item ConfigItem
+	err := s.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("project_id = ? AND environment_id = ? AND `key` = ?", projectID, envID, key).
+		First(&item).Error
+	return item, queryErr("lock item", err)
+}
+
 // PutItem creates or replaces an item.
-func (s *Store) PutItem(ctx context.Context, item ConfigItem) (ConfigItem, error) {
-	err := s.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "project_id"}, {Name: "environment_id"}, {Name: "key"}},
-		DoUpdates: clause.AssignmentColumns([]string{"value", "description", "updated_by", "updated_at"}),
-	}).Create(&item).Error
-	if err != nil {
-		return ConfigItem{}, fmt.Errorf("put item: %w", err)
+func (s *Store) PutItem(ctx context.Context, item ItemInput) (ConfigItem, error) {
+	if err := s.PutItems(ctx, []ItemInput{item}); err != nil {
+		return ConfigItem{}, err
 	}
 	return s.GetItem(ctx, item.ProjectID, item.EnvironmentID, item.Key)
 }
 
 // DeleteItem removes an item by key.
 func (s *Store) DeleteItem(ctx context.Context, projectID, envID uint, key string) error {
-	res := s.db.WithContext(ctx).Where("project_id = ? AND environment_id = ? AND `key` = ?", projectID, envID, key).Delete(&ConfigItem{})
-	return s.mustAffect(ctx, res, "delete item")
+	return s.Transaction(ctx, func(tx *Store) error {
+		item, err := tx.itemForUpdate(ctx, projectID, envID, key)
+		if err != nil {
+			return err
+		}
+		if item.Secret {
+			if err := tx.protectProposals(ctx, projectID, envID, key); err != nil {
+				return err
+			}
+		}
+		res := tx.db.Where("project_id = ? AND environment_id = ? AND `key` = ?", projectID, envID, key).Delete(&ConfigItem{})
+		return tx.mustAffect(ctx, res, "delete item")
+	})
 }
 
 // RenameItem changes the key of an existing item.
 func (s *Store) RenameItem(ctx context.Context, projectID, envID uint, oldKey, newKey string) error {
-	res := s.db.WithContext(ctx).Model(&ConfigItem{}).
-		Where("project_id = ? AND environment_id = ? AND `key` = ?", projectID, envID, oldKey).
-		Update("key", newKey)
-	return s.mustAffect(ctx, res, "rename item")
+	return s.Transaction(ctx, func(tx *Store) error {
+		item, err := tx.itemForUpdate(ctx, projectID, envID, oldKey)
+		if err != nil {
+			return err
+		}
+		if item.Secret {
+			for _, key := range []string{oldKey, newKey} {
+				if err := tx.protectProposals(ctx, projectID, envID, key); err != nil {
+					return err
+				}
+			}
+		}
+		res := tx.db.Model(&ConfigItem{}).
+			Where("project_id = ? AND environment_id = ? AND `key` = ?", projectID, envID, oldKey).
+			Update("key", newKey)
+		return tx.mustAffect(ctx, res, "rename item")
+	})
 }
 
 // CreateAPIKey stores a key digest.
@@ -405,10 +434,18 @@ func (s *Store) DeleteAPIKey(ctx context.Context, id uint, revision uint64) erro
 
 // CreateProposal stores an agent proposal.
 func (s *Store) CreateProposal(ctx context.Context, p MCPProposal) (MCPProposal, error) {
-	if err := s.db.WithContext(ctx).Create(&p).Error; err != nil {
-		return MCPProposal{}, fmt.Errorf("create proposal: %w", err)
-	}
-	return p, nil
+	err := s.Transaction(ctx, func(tx *Store) error {
+		item, err := tx.itemForUpdate(ctx, p.ProjectID, p.EnvironmentID, p.Key)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return err
+		}
+		p.Secret = p.Secret || item.Secret
+		if err := tx.db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).Create(&p).Error; err != nil {
+			return fmt.Errorf("create proposal: %w", err)
+		}
+		return nil
+	})
+	return p, err
 }
 
 // ProposalByID loads a proposal inside a project.
@@ -443,7 +480,7 @@ func (s *Store) ReviewProposal(ctx context.Context, projectID, id, reviewer uint
 		status := StatusRejected
 		if approve {
 			status = StatusApplied
-			applyErr := tx.applyProposal(p, reviewer)
+			applyErr := tx.applyProposal(ctx, p, reviewer)
 			if applyErr != nil {
 				return applyErr
 			}
@@ -460,7 +497,7 @@ func (s *Store) ReviewProposal(ctx context.Context, projectID, id, reviewer uint
 	return result, err
 }
 
-func (s *Store) applyProposal(p MCPProposal, reviewer uint) error {
+func (s *Store) applyProposal(ctx context.Context, p MCPProposal, reviewer uint) error {
 	switch p.Action {
 	case ActionSet:
 		if p.Value == nil {
@@ -468,11 +505,18 @@ func (s *Store) applyProposal(p MCPProposal, reviewer uint) error {
 		}
 		item := ConfigItem{
 			ProjectID: p.ProjectID, EnvironmentID: p.EnvironmentID, Key: p.Key,
-			Value: *p.Value, UpdatedBy: reviewer,
+			Value: *p.Value, Secret: p.Secret, UpdatedBy: reviewer,
 		}
-		err := s.db.Clauses(clause.OnConflict{
+		columns := []string{"value", "updated_by", "updated_at"}
+		if p.Secret {
+			columns = append(columns, "secret")
+			if err := s.protectProposals(ctx, p.ProjectID, p.EnvironmentID, p.Key); err != nil {
+				return err
+			}
+		}
+		err := s.db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "project_id"}, {Name: "environment_id"}, {Name: "key"}},
-			DoUpdates: clause.AssignmentColumns([]string{"value", "updated_by", "updated_at"}),
+			DoUpdates: clause.AssignmentColumns(columns),
 		}).Create(&item).Error
 		if err != nil {
 			return fmt.Errorf("apply proposal set: %w", err)

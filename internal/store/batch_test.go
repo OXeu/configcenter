@@ -13,18 +13,18 @@ func TestPutItemsRollsBackEarlierChunks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	original, err := s.PutItem(t.Context(), ConfigItem{ProjectID: 1, EnvironmentID: 1, Key: "keep", Value: "original", UpdatedBy: 1})
+	original, err := s.PutItem(t.Context(), ItemInput{ProjectID: 1, EnvironmentID: 1, Key: "keep", Value: "original", UpdatedBy: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := s.db.WithContext(t.Context()).Exec("CREATE TRIGGER reject_batch BEFORE INSERT ON config_items WHEN NEW.key = 'reject' BEGIN SELECT RAISE(ABORT, 'rejected batch'); END").Error; err != nil {
 		t.Fatal(err)
 	}
-	items := []ConfigItem{{ProjectID: 1, EnvironmentID: 1, Key: "keep", Value: "changed", UpdatedBy: 1}}
+	items := []ItemInput{{ProjectID: 1, EnvironmentID: 1, Key: "keep", Value: "changed", UpdatedBy: 1}}
 	for i := 0; i < 100; i++ {
-		items = append(items, ConfigItem{ProjectID: 1, EnvironmentID: 1, Key: fmt.Sprintf("new.%d", i), Value: "value", UpdatedBy: 1})
+		items = append(items, ItemInput{ProjectID: 1, EnvironmentID: 1, Key: fmt.Sprintf("new.%d", i), Value: "value", UpdatedBy: 1})
 	}
-	items = append(items, ConfigItem{ProjectID: 1, EnvironmentID: 1, Key: "reject", Value: "value", UpdatedBy: 1})
+	items = append(items, ItemInput{ProjectID: 1, EnvironmentID: 1, Key: "reject", Value: "value", UpdatedBy: 1})
 	if err := s.PutItems(t.Context(), items); err == nil {
 		t.Fatal("failing batch committed")
 	}

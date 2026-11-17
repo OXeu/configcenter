@@ -40,7 +40,8 @@ func validateBatch(keys []string) error {
 
 // ReadMany reads selected keys directly from the backend in one request.
 // Missing keys are omitted; remote reads bypass cached and fallback values.
-// It does not replace the loaded snapshot and requires config:read remotely.
+// It does not replace the loaded snapshot. RevealSecrets requires config:read-secrets;
+// ordinary remote reads require config:read and return masked secrets.
 func (c *Client) ReadMany(ctx context.Context, keys []string) (map[string]string, error) {
 	c.opMu.Lock()
 	defer c.opMu.Unlock()
@@ -73,7 +74,7 @@ func (c *Client) readMany(ctx context.Context, keys []string) (map[string]string
 	var payload struct {
 		Items []Item `json:"items"`
 	}
-	if err := c.get(ctx, "/environments/"+url.PathEscape(c.env)+"/values", url.Values{"keys": keys}, &payload); err != nil {
+	if err := c.get(ctx, c.valuesPath(), url.Values{"keys": keys}, &payload); err != nil {
 		return nil, err
 	}
 	selected := make(map[string]bool, len(keys))

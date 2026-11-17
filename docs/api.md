@@ -21,6 +21,29 @@
 
 MCP 的 `list_config` 和 `list_values` 接受 `keys` 字符串数组，`set_configs` 接受上述 `items` 数组。SDK 提供 `ReadMany` 和 `PutMany`；`EnsureDefaults` 先批量读，再批量写入缺失项，不使用独立初始化 API。远端首次初始化应由一个实例完成，读写之间不提供跨请求并发保护。
 
+## 密钥字段与读取权限
+
+创建或编辑配置时可设置 `secret: true`。未传 `secret` 的单项和批量写入保留已有标记；新增字段默认不是密钥。取消标记需要 `config:read-secrets`，MCP 不允许取消。单项更新已有密钥时可省略 `value` 以保留原值并修改键名或描述；不要把掩码作为新值提交。批量写入仍要求每项提供 `value`。
+
+读取权限分为两个独立 scope：
+
+| scope                 | 行为                         |
+| --------------------- | ---------------------------- |
+| `config:read`         | 普通读取，密钥始终返回掩码   |
+| `config:read-secrets` | 允许通过专用接口读取密钥明文 |
+
+所有普通管理 API、SDK 读取接口和 MCP 工具都返回 `secret`、`masked` 标记，密钥的 `value` 为掩码，例如 `sk-****x123`。超过 8 个字符的值只保留前 3、后 4 个字符；8 个字符以内（包括空值）统一为 `****`。即使凭据同时拥有特权 scope，普通接口仍只返回掩码。写入响应、提案列表及审核响应遵循同一规则。字段改为密钥后，已有提案也会持续受保护，字段重命名或删除不会公开历史提案值。
+
+明文只通过以下显式授权接口返回，响应使用 `Cache-Control: no-store`：
+
+| 方法 | 路径                                                            | 权限                                                                 |
+| ---- | --------------------------------------------------------------- | -------------------------------------------------------------------- |
+| POST | `/api/v1/projects/:project/environments/:env/items/:key/reveal` | `config:read-secrets`                                                |
+| POST | `/api/v1/projects/:project/proposals/:id/reveal`                | `config:read-secrets` 和 `proposals:read`                            |
+| GET  | `/api/v1/agent/environments/:env/values/reveal`                 | `config:read-secrets`；支持 `project`、`prefix` 或重复的 `keys` 参数 |
+
+这些接口不提供 MCP 工具；MCP 即使持有特权 scope 也不能调用。浏览器用户仍按项目所有权和角色授权，点击「查看」后才发送带 CSRF 的明文请求；隐藏、刷新或切换页面后清除已查看的值。编辑弹窗可以保留原密钥、授权查看，或直接输入替代值。服务端不会通过普通页面数据预加载明文。
+
 ## 认证与 scope
 
 请求携带 `Authorization: Bearer cc_…`。所有 API Key 使用 scope 权限模型。旧的 `ApiKey` 鉴权 scheme 不再接受，已有 Key 的值无需更换。MCP 的 OAuth 访问令牌仅用于 `/mcp`，不能直接调用这里的 REST API。
@@ -51,7 +74,8 @@ MCP 的 `list_config` 和 `list_values` 接受 `keys` 字符串数组，`set_con
 | `environments:read`   | 读取环境列表                                                 |
 | `environments:write`  | 创建环境                                                     |
 | `environments:delete` | 删除环境及其配置                                             |
-| `config:read`         | 读取配置列表或单个配置项                                     |
+| `config:read`         | 读取配置列表或单个配置项，密钥返回掩码                       |
+| `config:read-secrets` | 通过专用授权接口读取配置明文                                 |
 | `config:write`        | 创建、更新或重命名配置                                       |
 | `config:delete`       | 删除配置                                                     |
 | `proposals:read`      | 列出变更提案                                                 |

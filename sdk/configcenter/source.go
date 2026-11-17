@@ -79,7 +79,7 @@ func (s remoteSource) Read(ctx context.Context, prefix string) ([]Item, error) {
 	var body struct {
 		Items []Item `json:"items"`
 	}
-	path := "/environments/" + url.PathEscape(s.client.env) + "/values"
+	path := s.client.valuesPath()
 	if err := s.client.get(ctx, path, query, &body); err != nil {
 		return nil, err
 	}

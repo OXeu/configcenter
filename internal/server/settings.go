@@ -1,7 +1,9 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/OXeu/configcenter/internal/auth"
 
@@ -18,12 +20,21 @@ func (s *Server) settingsPage(c *gin.Context) {
 }
 
 func (s *Server) apiSettings(c *gin.Context) {
-	allowed, err := s.store.RegistrationAllowed(c.Request.Context())
+	item, err := s.store.RegistrationSetting(c.Request.Context())
 	if err != nil {
 		s.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"settings": []gin.H{{"key": "allow_registration", "value": allowed}}})
+	var value any = maskSecret(item.Value)
+	if !item.Secret {
+		allowed, err := strconv.ParseBool(item.Value)
+		if err != nil {
+			s.fail(c, fmt.Errorf("parse registration policy: %w", strconv.ErrSyntax))
+			return
+		}
+		value = allowed
+	}
+	c.JSON(http.StatusOK, gin.H{"settings": []gin.H{{"key": item.Key, "value": value, "secret": item.Secret, "masked": item.Secret}}})
 }
 
 func (s *Server) apiSaveSettings(c *gin.Context) {

@@ -17,6 +17,7 @@ type apiOperation struct {
 	Permissions    []store.Permission
 	Global         bool
 	Agent          bool
+	RESTOnly       bool
 	Handler        gin.HandlerFunc
 	ProjectHandler func(*gin.Context, store.Project)
 	Arguments      []mcpArgument
@@ -54,6 +55,8 @@ func (s *Server) apiOperations() []apiOperation {
 	id := mcpArgument{Name: "id", Target: "id", Location: "path", Required: true, Schema: map[string]any{"type": "integer", "minimum": 1}}
 	name := argument("name", "body", true)
 	description := argument("description", "body", false)
+	secret := typedArgument("secret", "boolean", false)
+	secret.Schema["description"] = "Mark the value as secret. MCP accepts only true; omission preserves existing protection."
 	slug := argument("slug", "body", true)
 	prefix := argument("prefix", "query", false)
 	newKey := argument("new_key", "body", false)
@@ -66,6 +69,7 @@ func (s *Server) apiOperations() []apiOperation {
 		"key":         map[string]any{"type": "string"},
 		"value":       map[string]any{"type": "string"},
 		"description": map[string]any{"type": "string"},
+		"secret":      secret.Schema,
 	}, "key", "value")
 	scopes := typedArgument("scopes", "array", true)
 	permissions := make([]string, 0, len(store.KeyPermissions()))
@@ -85,6 +89,9 @@ func (s *Server) apiOperations() []apiOperation {
 	items := envs + "/:env/items"
 	proposals := projectPath + "/proposals"
 	return []apiOperation{
+		{Name: "reveal_config", Description: "Read configuration plaintext through an explicitly privileged request.", RESTOnly: true, Method: http.MethodPost, Path: items + "/:key/reveal", Permissions: []store.Permission{store.ConfigReadSecrets}, ProjectHandler: s.apiRevealItem},
+		{Name: "reveal_proposal", Description: "Read a proposal value through an explicitly privileged request.", RESTOnly: true, Method: http.MethodPost, Path: proposals + "/:id/reveal", Permissions: []store.Permission{store.ConfigReadSecrets, store.ProposalsRead}, ProjectHandler: s.apiRevealProposal},
+		{Name: "reveal_values", Description: "Read configuration plaintext for authorized application execution.", RESTOnly: true, Agent: true, Method: http.MethodGet, Path: "/agent/environments/:env/values/reveal", Permissions: []store.Permission{store.ConfigReadSecrets}, Handler: s.apiRevealValues},
 		{Name: "get_identity", Description: "Read the current user or API key identity.", Method: http.MethodGet, Path: "/me", Handler: s.apiMe},
 		{Name: "get_key_scopes", Description: "List available projects and scope permissions for API keys.", Method: http.MethodGet, Path: "/key-scopes", Handler: s.apiKeyScopes},
 		{Name: "list_keys", Description: "List API key metadata within your management permissions.", Method: http.MethodGet, Path: "/keys", Permissions: []store.Permission{store.KeysRead}, Handler: s.apiListKeys, Arguments: []mcpArgument{argument("project", "query", false)}},
@@ -99,13 +106,13 @@ func (s *Server) apiOperations() []apiOperation {
 		{Name: "list_environments", Description: "List a project's environments.", Method: http.MethodGet, Path: envs, Permissions: []store.Permission{store.EnvironmentsRead}, ProjectHandler: s.apiListEnvironments, Arguments: []mcpArgument{project}},
 		{Name: "create_environment", Description: "Create an environment in a project.", Method: http.MethodPost, Path: envs, Permissions: []store.Permission{store.EnvironmentsWrite}, ProjectHandler: s.apiCreateEnvironment, Arguments: []mcpArgument{project, slug, name}},
 		{Name: "delete_environment", Description: "Delete an environment and its configuration.", Method: http.MethodDelete, Path: envs + "/:env", Permissions: []store.Permission{store.EnvironmentsDelete}, ProjectHandler: s.apiDeleteEnvironment, Arguments: []mcpArgument{project, env}},
-		{Name: "list_config", Description: "Read configuration items, optionally filtered by keys or a key prefix.", Method: http.MethodGet, Path: items, Permissions: []store.Permission{store.ConfigRead}, ProjectHandler: s.apiListItems, Arguments: []mcpArgument{project, env, prefix, keys}},
-		{Name: "get_config", Description: "Read one configuration item.", Method: http.MethodGet, Path: items + "/:key", Permissions: []store.Permission{store.ConfigRead}, ProjectHandler: s.apiGetItem, Arguments: []mcpArgument{project, env, key}},
-		{Name: "set_config", Description: "Create or update a configuration item immediately; optionally rename its key.", Method: http.MethodPut, Path: items + "/:key", Permissions: []store.Permission{store.ConfigWrite}, ProjectHandler: s.apiPutItem, Arguments: []mcpArgument{project, env, key, argument("value", "body", true), description, newKey}},
+		{Name: "list_config", Description: "Read configuration metadata and non-secret values, optionally filtered by keys or a key prefix. Secret values are masked.", Method: http.MethodGet, Path: items, Permissions: []store.Permission{store.ConfigRead}, ProjectHandler: s.apiListItems, Arguments: []mcpArgument{project, env, prefix, keys}},
+		{Name: "get_config", Description: "Read one configuration item. Secret values are masked.", Method: http.MethodGet, Path: items + "/:key", Permissions: []store.Permission{store.ConfigRead}, ProjectHandler: s.apiGetItem, Arguments: []mcpArgument{project, env, key}},
+		{Name: "set_config", Description: "Create or update a configuration item immediately; optionally rename its key.", Method: http.MethodPut, Path: items + "/:key", Permissions: []store.Permission{store.ConfigWrite}, ProjectHandler: s.apiPutItem, Arguments: []mcpArgument{project, env, key, argument("value", "body", true), description, newKey, secret}},
 		{Name: "set_configs", Description: "Atomically create or update multiple configuration items.", Method: http.MethodPut, Path: items, Permissions: []store.Permission{store.ConfigWrite}, ProjectHandler: s.apiPutItems, Arguments: []mcpArgument{project, env, batch}},
 		{Name: "delete_config", Description: "Delete a configuration item immediately.", Method: http.MethodDelete, Path: items + "/:key", Permissions: []store.Permission{store.ConfigDelete}, ProjectHandler: s.apiDeleteItem, Arguments: []mcpArgument{project, env, key}},
-		{Name: "list_proposals", Description: "List project change proposals, optionally filtered by status.", Method: http.MethodGet, Path: proposals, Permissions: []store.Permission{store.ProposalsRead}, ProjectHandler: s.apiListProposals, Arguments: []mcpArgument{project, argument("status", "query", false)}},
-		{Name: "propose_config", Description: "Submit a configuration change for review. Set actions require a value.", Method: http.MethodPost, Path: proposals, Permissions: []store.Permission{store.ProposalsWrite}, ProjectHandler: s.apiCreateProposal, Arguments: []mcpArgument{project, argument("environment", "body", true), argument("key", "body", true), enumArgument("action", store.ActionSet, store.ActionDelete), argument("value", "body", false), argument("reason", "body", false)}},
+		{Name: "list_proposals", Description: "List project change proposals, optionally filtered by status. Secret values are masked.", Method: http.MethodGet, Path: proposals, Permissions: []store.Permission{store.ProposalsRead}, ProjectHandler: s.apiListProposals, Arguments: []mcpArgument{project, argument("status", "query", false)}},
+		{Name: "propose_config", Description: "Submit a configuration change for review. Set actions require a value. Secret plaintext is never returned.", Method: http.MethodPost, Path: proposals, Permissions: []store.Permission{store.ProposalsWrite}, ProjectHandler: s.apiCreateProposal, Arguments: []mcpArgument{project, argument("environment", "body", true), argument("key", "body", true), enumArgument("action", store.ActionSet, store.ActionDelete), argument("value", "body", false), argument("reason", "body", false), secret}},
 		{Name: "review_proposal", Description: "Approve and apply, or reject, a pending proposal.", Method: http.MethodPost, Path: proposals + "/:id/review", Permissions: []store.Permission{store.ProposalsReview}, ProjectHandler: s.apiReviewProposal, Arguments: []mcpArgument{project, id, typedArgument("approve", "boolean", true)}},
 		{Name: "list_users", Description: "List all users. Requires global users:read.", Method: http.MethodGet, Path: "/users", Permissions: []store.Permission{store.UsersRead}, Global: true, Handler: s.apiListUsers},
 		{Name: "update_user_role", Description: "Change a user's role. Requires global users:write; you cannot demote your own account.", Method: http.MethodPatch, Path: "/users/:id", Permissions: []store.Permission{store.UsersWrite}, Global: true, Handler: s.apiSetRole, Arguments: []mcpArgument{id, enumArgument("role", string(store.RoleUser), string(store.RoleAdmin))}},
@@ -113,7 +120,7 @@ func (s *Server) apiOperations() []apiOperation {
 		{Name: "get_settings", Description: "Read system settings. Requires global settings:read.", Method: http.MethodGet, Path: "/settings", Permissions: []store.Permission{store.SettingsRead}, Global: true, Handler: s.apiSettings},
 		{Name: "update_settings", Description: "Update system registration settings. Requires global settings:write.", Method: http.MethodPut, Path: "/settings", Permissions: []store.Permission{store.SettingsWrite}, Global: true, Handler: s.apiSaveSettings, Arguments: []mcpArgument{typedArgument("allow_registration", "boolean", true)}},
 		{Name: "get_project", Description: "Read project metadata and environments using an API key.", Method: http.MethodGet, Path: "/agent/project", Permissions: []store.Permission{store.ProjectsRead, store.EnvironmentsRead}, Agent: true, Handler: s.apiProgrammaticProject, Arguments: []mcpArgument{argument("project", "query", true)}},
-		{Name: "list_values", Description: "Read environment configuration using the SDK API.", Method: http.MethodGet, Path: "/agent/environments/:env/values", Permissions: []store.Permission{store.ConfigRead}, Agent: true, Handler: s.apiProgrammaticItems, Arguments: []mcpArgument{argument("project", "query", true), env, prefix, keys}},
+		{Name: "list_values", Description: "Read environment configuration using the SDK API. Secret values are masked over MCP.", Method: http.MethodGet, Path: "/agent/environments/:env/values", Permissions: []store.Permission{store.ConfigRead}, Agent: true, Handler: s.apiProgrammaticItems, Arguments: []mcpArgument{argument("project", "query", true), env, prefix, keys}},
 	}
 }
 

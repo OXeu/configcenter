@@ -139,7 +139,7 @@ func TestMCPCompleteAPI(t *testing.T) {
 	call("delete_environment", map[string]any{"project": "billing", "environment": "staging"}, http.StatusNoContent)
 	call("delete_project", map[string]any{"project": "billing"}, http.StatusNoContent)
 	for _, op := range s.apiOperations() {
-		if !seen[op.Name] {
+		if !op.RESTOnly && !seen[op.Name] {
 			t.Errorf("API operation %s was not exercised over MCP", op.Name)
 		}
 	}

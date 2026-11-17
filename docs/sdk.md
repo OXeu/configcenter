@@ -2,7 +2,9 @@
 
 [文档首页](/docs/) · [HTTP API](/docs/api) · [MCP 接口](/docs/mcp) · [Markdown 原文](/docs/sdk.md)
 
-SDK 使用只授权一个具体项目的 API Key，配置读取需要 `config:read`；调用项目环境发现方法还需要 `projects:read` 和 `environments:read`。多项目或 `*` scope 请使用 [HTTP API](/docs/api) 或 [MCP](/docs/mcp)，SDK 不提供选择项目的参数。
+SDK 使用只授权一个具体项目的 API Key，普通配置读取需要 `config:read`，密钥返回掩码；调用项目环境发现方法还需要 `projects:read` 和 `environments:read`。多项目或 `*` scope 请使用 [HTTP API](/docs/api) 或 [MCP](/docs/mcp)，SDK 不提供选择项目的参数。
+
+需要在应用执行路径使用密钥明文时，显式设置 `Config.RevealSecrets: true`，并为该应用的 API Key 授予 `config:read-secrets`。此选项使 `Load`、`LoadPrefix`、`ReadMany` 和轮询读取使用专用的 `/values/reveal` 接口；权限不足会返回错误，不会降级重试普通读取。默认保持掩码读取，`Item.Secret` 与 `Item.Masked` 可用于区分密钥及其返回形式。只启用特权读取时无需额外授予 `config:read`，写入及项目发现仍需要各自的 scope。
 
 ## 安装
 
