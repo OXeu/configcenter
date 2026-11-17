@@ -4,8 +4,8 @@ Rules for anyone (human or model) changing configcenter. They are enforced where
 
 ## Layout
 
-- `cmd/configcenter` — main, flags-free, environment driven. `internal/config` loads `.env.local` (or `CC_ENV_FILE`) with godotenv before reading variables; exported variables are never overridden. Never print secret values.
-- `internal/config` — loads the env file and reads every environment variable here and nowhere else.
+- `cmd/configcenter` — main, flags-free, SDK configured. `internal/config` reads `.env.local` (or `CC_ENV_FILE`) through the SDK without modifying process variables. Never print secret values.
+- `internal/config` — reads every environment variable here and nowhere else. Local `CC_CONFIGCENTER_*` settings bootstrap the SDK; runtime settings prefer ConfigCenter, then exported variables, the env file and defaults. Remote read failures warn and fall back locally; cancellation and invalid configuration fail startup.
 - `internal/store` — gorm models and all queries; one `Store` method per query.
 - `internal/auth` — sessions, roles, CSRF, API-key and agent middleware, OAuth provider adapter.
 - `center-common/oauth` — the shared RFC 6749 + OIDC client (discovery, PKCE, id_token verification, userinfo fallback).

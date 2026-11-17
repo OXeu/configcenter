@@ -54,6 +54,12 @@ Open http://127.0.0.1:8080. This starts a local SQLite instance; sign-in remains
 4. Set `CC_PUBLIC_URL` to the deployed public address when deploying beyond localhost.
 5. Restart the binary to apply the configuration.
 
+### Load settings from ConfigCenter
+
+Set `CC_CONFIGCENTER_URL`, `CC_CONFIGCENTER_API_KEY` and optionally `CC_CONFIGCENTER_ENVIRONMENT` in the process environment or `.env.local`. The bundled Go SDK reads runtime `CC_*` settings from the key's project, including OAuth settings such as `CC_OAUTH_ISSUER=https://auth.xeu.life`.
+
+Remote values override local settings. Missing keys fall back to process variables, `.env.local` and defaults; remote failures warn and use local settings so the service can bootstrap itself. See [configuration](docs/guide.md#configuration) for permissions and startup behavior.
+
 ### Production and development
 
 The [deployment and configuration guide](docs/guide.md) retains the full environment table, MySQL and Tencent SCF instructions, API/SDK overview and development workflow. Run `make check` with golangci-lint installed before shipping. Generated assets and binaries stay in `.tmp/`; the production binary serves the UI without Node.js.

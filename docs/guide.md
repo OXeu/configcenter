@@ -39,7 +39,33 @@ Accounts without a public email get `<id>@github.com`.
 
 ## Configuration
 
-All settings come from the environment (read once in `internal/config`). The binary loads `.env.local` itself with [godotenv](https://github.com/joho/godotenv) (`CC_ENV_FILE` selects another file); variables already exported win over the file, so `CC_ADDR=127.0.0.1:9000 .tmp/bin/configcenter` and `CC_ADDR=… make run` both work, and a missing file is fine. `CC_OAUTH_ISSUER` and `CC_PUBLIC_URL` are trimmed of trailing slashes, and startup logs the resulting address, public URL and OAuth state.
+The binary uses its own [Go SDK](sdk.md) to load configuration once at startup in `internal/config`. It reads the optional `.env.local` through the SDK's dotenv source without changing process variables; `CC_ENV_FILE` selects another file, and a missing file is allowed.
+
+Runtime settings resolve in this order:
+
+1. ConfigCenter values from the selected project and environment.
+2. Exported process environment variables.
+3. The local env file.
+4. Application defaults.
+
+Remote empty strings are explicit values: clearing an OAuth setting remotely does not restore its old local value. Empty local settings retain their default behavior. `CC_OAUTH_ISSUER` and `CC_PUBLIC_URL` are trimmed of trailing slashes; the callback defaults to `CC_PUBLIC_URL/oauth/callback`.
+
+The SDK connection is bootstrapped only from process variables or the local env file; exported variables take precedence. Remote settings cannot redirect this connection.
+
+| Bootstrap variable | Default | Meaning |
+| --- | --- | --- |
+| `CC_ENV_FILE` | `.env.local` | Optional local bootstrap and fallback settings |
+| `CC_CONFIGCENTER_URL` | | ConfigCenter server root; omit together with the API key for local startup |
+| `CC_CONFIGCENTER_API_KEY` | | API key scoped to the project holding this server's settings |
+| `CC_CONFIGCENTER_ENVIRONMENT` | `production` | Environment to read within that project |
+
+The SDK requests the `CC_` prefix through the secret-reveal endpoint, so the key needs `projects:read`, `environments:read`, `config:read` and `config:read-secrets` on exactly one project. Store session secrets, database credentials and OAuth client secrets as secret configuration items.
+
+Remote reads time out after five seconds. A failed read logs a warning and uses local settings, allowing a single instance to restart when its own API is unavailable. Keep the required database and authentication fallback settings locally for this case.
+
+Invalid bootstrap settings, malformed dotenv files, invalid resolved configuration and process cancellation fail startup. ConfigCenter does not write fallback values to the remote project or reload settings automatically; restart to apply changes. Startup logs include the listen address, public URL and OAuth enabled state, never secret values.
+
+To use AuthCenter, store `CC_OAUTH_ISSUER=https://auth.xeu.life`, its registered client ID and secret, the required scopes and callback in the selected project environment. These settings then override older local GitHub configuration.
 
 | Variable                                        | Default                       | Meaning                                                                  |
 | ----------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------ |

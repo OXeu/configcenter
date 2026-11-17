@@ -1,15 +1,14 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net"
 	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/joho/godotenv"
 
 	"github.com/OXeu/configcenter/internal/auth"
 )
@@ -39,19 +38,17 @@ type Bootstrap struct {
 // DefaultEnvFile is read by the binary unless CC_ENV_FILE points elsewhere.
 const DefaultEnvFile = ".env.local"
 
-// Load reads configuration from the environment. It first loads the env file
-// (CC_ENV_FILE, default .env.local) with godotenv, which does not override
-// variables that are already set, so `CC_ADDR=… ./configcenter` and exported
-// variables still win. A missing file is not an error.
-func Load(lookup func(string) (string, bool)) (Config, error) {
-	envFile := lookupOr(lookup, "CC_ENV_FILE", DefaultEnvFile)
-	if err := godotenv.Load(envFile); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return Config{}, fmt.Errorf("load env file %s: %w", envFile, err)
+// Load reads runtime settings through the SDK, preferring remote configuration
+// over the process environment, the optional env file and application defaults.
+func Load(ctx context.Context, lookup func(string) (string, bool)) (Config, error) {
+	env, err := loadSource(ctx, lookup)
+	if err != nil {
+		return Config{}, err
 	}
-	env := func(key, fallback string) string {
-		return lookupOr(lookup, key, fallback)
-	}
+	return fromSnapshot(env)
+}
 
+func fromSnapshot(env func(string, string) string) (Config, error) {
 	cfg := Config{
 		Addr:           env("CC_ADDR", "127.0.0.1:8080"),
 		DatabaseDriver: env("CC_DB_DRIVER", "sqlite"),

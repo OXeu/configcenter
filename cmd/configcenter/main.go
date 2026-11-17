@@ -24,14 +24,14 @@ func main() {
 }
 
 func run(logger *slog.Logger) error {
-	cfg, err := config.Load(os.LookupEnv)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	cfg, err := config.Load(ctx, os.LookupEnv)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 	logger.Info("configuration loaded", "addr", cfg.Addr, "public_url", cfg.PublicURL, "oauth", cfg.OAuth.Enabled(), "database_driver", cfg.DatabaseDriver)
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	engine, err := server.Engine(ctx, cfg, logger)
 	if err != nil {

@@ -54,6 +54,12 @@ CC_DB=file:.tmp/configcenter.db ./.tmp/bin/configcenter
 4. 部署到公网时，将 `CC_PUBLIC_URL` 设为实际公网地址。
 5. 重启程序，使配置生效。
 
+### 从 ConfigCenter 加载配置
+
+在进程环境变量或 `.env.local` 中设置 `CC_CONFIGCENTER_URL`、`CC_CONFIGCENTER_API_KEY`，按需设置 `CC_CONFIGCENTER_ENVIRONMENT`。程序使用自身 Go SDK，从密钥所属项目读取运行时 `CC_*` 配置，包括 `CC_OAUTH_ISSUER=https://auth.xeu.life` 等 OAuth 设置。
+
+远程值优先于本地配置；缺失项依次回退到进程环境变量、`.env.local` 和默认值。远程读取失败时记录告警并使用本地配置，以支持服务自身启动。权限与启动行为见[配置说明](docs/guide.md#configuration)。
+
 ### 生产部署与开发
 
 完整环境变量表、MySQL、腾讯 SCF、API/SDK 和开发流程保留在[部署与配置指南](docs/guide.md)中。发布前安装 golangci-lint 并运行 `make check`。资源和二进制均生成到 `.tmp/`；生产二进制直接提供界面，无需 Node.js。
