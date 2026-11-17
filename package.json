@@ -20,10 +20,12 @@
     "@types/markdown-it": "^14.2.0",
     "@types/node": "^26.6.6",
     "@vitejs/plugin-vue": "^6.0.11",
+    "@vue/devtools-api": "^8.2.1",
     "@vue/test-utils": "^2.6.0",
     "@yusufceng1z/ding": "^0.0.6",
     "jsdom": "^26.1.0",
     "markdown-it": "^15.0.3",
+    "pinia": "^4.1.0",
     "postcss": "^8.5.33",
     "remixicon": "^4.9.1",
     "shiki": "^4.6.0",
@@ -32,6 +34,7 @@
     "typescript-native": "npm:typescript@^7.0.2",
     "vite-plus": "1.6.0",
     "vue": "^3.5.45",
+    "vue-router": "^4.6.5",
     "vue-tsc": "^3.3.14"
   },
   "overrides": {

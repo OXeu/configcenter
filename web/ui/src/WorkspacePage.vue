@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import NavigationLink from '@oxeu/center-common/ui/NavigationLink.vue'
 import { computed, defineAsyncComponent, onMounted, onUnmounted } from 'vue'
 import DangerActions from './DangerActions.vue'
 const DialogPanel = defineAsyncComponent(() => import('./DialogPanel.vue'))
@@ -165,10 +166,10 @@ onUnmounted(() => {
       <tbody>
         <tr v-for="row in state.rows" :key="row.id ?? row.slug ?? row.key">
           <td v-for="column in columns" :key="column" :data-label="msg(labels[column])">
-            <a
+            <NavigationLink
               v-if="data.page === 'projects' && column === 'name'"
               :href="`/projects/${encodeURIComponent(row.slug)}`"
-              >{{ row.name }}</a
+              >{{ row.name }}</NavigationLink
             >
             <span v-else class="whitespace-pre-wrap break-all">{{ cell(row, column) }}</span>
             <span v-if="primaryBadge(row, column)" class="badge ml-2">

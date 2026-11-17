@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import NavigationLink from '@oxeu/center-common/ui/NavigationLink.vue'
 import DropdownMenu from '@oxeu/center-common/ui/DropdownMenu.vue'
 import DangerActions from './DangerActions.vue'
 import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
@@ -67,18 +68,26 @@ async function logout(): Promise<void> {
 </script>
 
 <template>
-  <a class="sr-only" href="#main">{{ msg('nav.skip') }}</a>
+  <NavigationLink class="sr-only" href="#main">{{ msg('nav.skip') }}</NavigationLink>
   <header class="flex flex-wrap items-center gap-2 border-b px-4 py-3 sm:gap-4 sm:px-6">
-    <a class="btn-ghost btn-icon mr-auto sm:mr-0" href="/projects" :aria-label="msg('app.name')">
+    <NavigationLink
+      class="btn-ghost btn-icon mr-auto sm:mr-0"
+      href="/projects"
+      :aria-label="msg('app.name')"
+    >
       <img :src="brandIcon.src" :srcset="brandIcon.srcset" width="32" height="32" alt="" />
-    </a>
+    </NavigationLink>
     <nav
       class="order-last flex w-full flex-wrap gap-1 sm:order-none sm:w-auto sm:flex-1"
       :aria-label="msg('nav.main')"
     >
-      <a v-if="data.loggedIn" class="btn-ghost" href="/projects">{{ msg('nav.projects') }}</a>
-      <a v-if="data.isAdmin" class="btn-ghost" href="/settings">{{ msg('title.settings') }}</a>
-      <a class="btn-ghost" href="/docs/">{{ msg('nav.docs') }}</a>
+      <NavigationLink v-if="data.loggedIn" class="btn-ghost" href="/projects">{{
+        msg('nav.projects')
+      }}</NavigationLink>
+      <NavigationLink v-if="data.isAdmin" class="btn-ghost" href="/settings">{{
+        msg('title.settings')
+      }}</NavigationLink>
+      <NavigationLink class="btn-ghost" href="/docs/">{{ msg('nav.docs') }}</NavigationLink>
     </nav>
     <button
       class="btn-ghost btn-icon"
@@ -90,13 +99,13 @@ async function logout(): Promise<void> {
     </button>
     <DropdownMenu :label="data.languageLabel" compact>
       <template #trigger><i class="ri-global-line" aria-hidden="true"></i></template>
-      <a
+      <NavigationLink
         v-for="language in data.languages"
         :key="language.tag"
         class="block rounded-sm px-2 py-1 text-sm hover:bg-muted"
         :href="`/language?lang=${language.tag}`"
         :aria-current="language.tag === data.lang ? 'true' : undefined"
-        >{{ language.label }}</a
+        >{{ language.label }}</NavigationLink
       >
     </DropdownMenu>
     <template v-if="data.loggedIn && data.me">
@@ -138,18 +147,22 @@ async function logout(): Promise<void> {
             </div>
           </div>
           <div class="border-t border-gray-200 pt-1">
-            <a
+            <NavigationLink
               class="btn-ghost w-full justify-start gap-2"
               href="/keys"
               :aria-label="msg('title.keys')"
             >
               <i class="ri-key-2-line" aria-hidden="true"></i>
               <span>{{ msg('nav.keys') }}</span>
-            </a>
-            <a v-if="data.isAdmin" class="btn-ghost w-full justify-start gap-2" href="/users">
+            </NavigationLink>
+            <NavigationLink
+              v-if="data.isAdmin"
+              class="btn-ghost w-full justify-start gap-2"
+              href="/users"
+            >
               <i class="ri-group-line" aria-hidden="true"></i>
               <span>{{ msg('nav.users') }}</span>
-            </a>
+            </NavigationLink>
           </div>
           <div class="mt-1 border-t pt-1">
             <DangerActions

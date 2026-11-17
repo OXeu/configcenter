@@ -19,6 +19,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 
+	"github.com/OXeu/center-common/httpui"
 	"github.com/OXeu/configcenter"
 	"github.com/OXeu/configcenter/internal/auth"
 	"github.com/OXeu/configcenter/internal/config"
@@ -207,6 +208,9 @@ func (s *Server) render(c *gin.Context, status int, data gin.H) {
 	if err != nil {
 		s.log.Error("encode page data", "error", err)
 		c.Status(http.StatusInternalServerError)
+		return
+	}
+	if httpui.ServePageData(c, status, fmt.Sprint(withCommon["Title"]), encoded) {
 		return
 	}
 	withCommon["PageJSON"] = template.JS(encoded) //nolint:gosec // json.Marshal escapes HTML delimiters before insertion into the inert script.
