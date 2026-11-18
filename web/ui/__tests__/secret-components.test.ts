@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import { flushPromises, mount } from '@vue/test-utils'
 import WorkspacePage from '../src/WorkspacePage.vue'
+import DialogPanel from '../src/DialogPanel.vue'
 import { createPage } from '../src/page.ts'
 import { createWorkspace } from '../src/workspace.ts'
 import { createSecretViews } from '../src/secrets.ts'
@@ -164,6 +165,71 @@ describe('secret configuration', () => {
     expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/reveal'))).toBe(false)
     const write = fetchMock.mock.calls.find(([, init]) => init.method === 'PUT')!
     expect(JSON.parse(write[1].body)).toMatchObject({ value: '', secret: true })
+    wrapper.unmount()
+  })
+
+  it('only updates a revealed JSON secret when formatting changes its text', async () => {
+    const compact = String.raw`{"2":[],"1":{"label":"<script>","count":9007199254740993,"escaped":"\u0061"},"2":true}`
+    const formatted = [
+      '{',
+      '  "2": [],',
+      '  "1": {',
+      '    "label": "<script>",',
+      '    "count": 9007199254740993,',
+      '    "escaped": "\\u0061"',
+      '  },',
+      '  "2": true',
+      '}',
+    ].join('\n')
+    const page = createPage(data)
+    const workspace = createWorkspace(data, page)
+    workspace.edit(row)
+    const read = vi.fn().mockResolvedValueOnce(formatted).mockResolvedValueOnce(compact)
+    workspace.form.readSecret = read
+    const wrapper = mount(DialogPanel, { props: { form: workspace.form, msg: page.msg } })
+    expect(wrapper.find('pre').exists()).toBe(false)
+
+    await workspace.form.toggleValue()
+    await settleDialog()
+    expect(wrapper.get('pre').element.textContent).toBe(formatted)
+    expect(wrapper.find('pre script').exists()).toBe(false)
+    expect(wrapper.findAll('pre span').length).toBeGreaterThan(1)
+    const format = () =>
+      wrapper.findAll('button').find((control) => control.text() === 'Format JSON')!
+    await format().trigger('click')
+    expect(workspace.form.keepSecret).toBe(true)
+
+    await workspace.form.toggleValue()
+    expect(wrapper.find('pre').exists()).toBe(false)
+    await workspace.form.toggleValue()
+    await format().trigger('click')
+    expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe(formatted)
+    expect(fetchMock).not.toHaveBeenCalled()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    const write = fetchMock.mock.calls.find(([, init]) => init.method === 'PUT')!
+    expect(JSON.parse(write[1].body)).toMatchObject({ value: formatted, secret: true })
+    wrapper.unmount()
+  })
+
+  it('keeps non-JSON drafts editable and saveable after a format attempt', async () => {
+    const page = createPage(data)
+    const workspace = createWorkspace(data, page)
+    workspace.edit({ key: 'config', value: 'enabled: true' })
+    const wrapper = mount(DialogPanel, { props: { form: workspace.form, msg: page.msg } })
+    await wrapper
+      .findAll('button')
+      .find((control) => control.text() === 'Format JSON')!
+      .trigger('click')
+    expect(wrapper.text()).toContain('Enter valid JSON to format this value.')
+    const input = wrapper.get<HTMLTextAreaElement>('textarea')
+    expect(input.element.value).toBe('enabled: true')
+    await input.setValue('enabled: false')
+    expect(wrapper.text()).not.toContain('Enter valid JSON to format this value.')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    const write = fetchMock.mock.calls.find(([, init]) => init.method === 'PUT')!
+    expect(JSON.parse(write[1].body)).toMatchObject({ value: 'enabled: false' })
     wrapper.unmount()
   })
 

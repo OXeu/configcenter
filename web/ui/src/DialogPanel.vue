@@ -3,11 +3,12 @@ import Button from '@oxeu/center-common/ui/Button.vue'
 import { computed, ref, watch, nextTick, useId } from 'vue'
 import DropdownSelect from '@oxeu/center-common/ui/DropdownSelect.vue'
 import CheckboxField from '@oxeu/center-common/ui/CheckboxField.vue'
+import ConfigValueEditor from './ConfigValueEditor.vue'
+import type { createForm } from './forms.ts'
+import type { Copy } from './i18n.ts'
+
 const formId = useId()
-const props = defineProps({
-  form: { type: Object, required: true },
-  msg: { type: Function, required: true },
-})
+const props = defineProps<{ form: ReturnType<typeof createForm>; msg: Copy['msg'] }>()
 const canAddScope = computed(() =>
   props.form.scopeProjects.some(
     (option: import('./forms.ts').Choice) =>
@@ -39,6 +40,10 @@ function hidden(field: { sensitive?: boolean }) {
 function sensitive(field: { sensitive?: boolean }) {
   return field.sensitive && (props.form.secret || props.form.keepSecret)
 }
+function setValue(key: string, value: string) {
+  props.form.values[key] = value
+  props.form.touch(key)
+}
 </script>
 <template>
   <dialog ref="dialog" class="dialog-panel" :aria-label="form.title" @cancel="cancel">
@@ -65,15 +70,29 @@ function sensitive(field: { sensitive?: boolean }) {
             :required="field.required"
             :disabled="form.busy"
           />
-          <textarea
+          <ConfigValueEditor
             v-else-if="field.multiline"
-            :id="`${formId}-${field.key}`"
-            v-model="form.values[field.key]"
-            class="input"
-            @input="form.touch(field.key)"
-            :required="field.required"
+            v-slot="{ syncScroll, setComposing }"
+            :value="form.values[field.key] ?? ''"
+            :msg="msg"
             :disabled="form.busy"
-          ></textarea>
+            @format="setValue(field.key, $event)"
+          >
+            <textarea
+              :id="`${formId}-${field.key}`"
+              v-model="form.values[field.key]"
+              class="input config-value-input"
+              wrap="off"
+              spellcheck="false"
+              autocapitalize="off"
+              :required="field.required"
+              :disabled="form.busy"
+              @input="form.touch(field.key)"
+              @scroll="syncScroll"
+              @compositionstart="setComposing(true)"
+              @compositionend="setComposing(false)"
+            ></textarea>
+          </ConfigValueEditor>
           <input
             v-else
             :id="`${formId}-${field.key}`"
