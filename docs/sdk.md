@@ -4,7 +4,7 @@
 
 SDK 使用只授权一个具体项目的 API Key，普通配置读取需要 `config:read`，密钥返回掩码；调用项目环境发现方法还需要 `projects:read` 和 `environments:read`。多项目或 `*` scope 请使用 [HTTP API](/docs/api) 或 [MCP](/docs/mcp)，SDK 不提供选择项目的参数。
 
-需要在应用执行路径使用密钥明文时，显式设置 `Config.RevealSecrets: true`，并为该应用的 API Key 授予 `config:read-secrets`。此选项使 `Load`、`LoadPrefix`、`ReadMany` 和轮询读取使用专用的 `/values/reveal` 接口；权限不足会返回错误，不会降级重试普通读取。默认保持掩码读取，`Item.Secret` 与 `Item.Masked` 可用于区分密钥及其返回形式。只启用特权读取时无需额外授予 `config:read`，写入及项目发现仍需要各自的 scope。
+需要在应用执行路径使用密钥明文时，显式设置 `Config.RevealSecrets: true`，并为该应用的 API Key 授予 `config:read-secrets`。此选项使 `Load`、`LoadPrefix`、`ReadMany` 和轮询读取使用专用的 `/values/reveal` 接口，不会降级重试普通读取。权限不足时，快照加载通过错误回调或告警报告并使用本地来源；直接调用 `ReadMany` 仍返回错误。默认保持掩码读取，`Item.Secret` 与 `Item.Masked` 可用于区分密钥及其返回形式。只启用特权读取时无需额外授予 `config:read`，写入及项目发现仍需要各自的 scope。
 
 ## 安装
 
@@ -37,6 +37,7 @@ func LoadPool(ctx context.Context, baseURL, apiKey string) (int, error) {
         APIKey: apiKey,
         Environment: "production",
         Timeout: 5 * time.Second,
+        Defaults: map[string]string{"db.pool": "10"},
     })
     if err != nil {
         return 0, fmt.Errorf("create configuration client: %w", err)
@@ -49,6 +50,8 @@ func LoadPool(ctx context.Context, baseURL, apiKey string) (int, error) {
 ```
 
 `BaseURL` 是服务根地址，不包含 `/api/v1/agent`。`New` 仅校验本地配置，不发请求，也不验证密钥是否有效。`Environment` 为空时使用 `production`。默认请求超时为 30 秒；提供 `HTTPClient` 时使用该客户端，`Timeout` 字段不再生效。
+
+启动配置读取使用 `Load` 或 `LoadPrefix`。远程服务不可达、超时、HTTP 错误（包括非标准的 443 状态）或无效响应不会使这些方法返回错误，而是通过 `Config.OnError` 报告；未设置回调时使用 `slog` 输出告警。应用可从已加载的回退来源或调用方默认值继续启动，仍需自行校验必填配置。
 
 ## 多级 fallback 与远程缓存
 
@@ -69,15 +72,18 @@ client, err := configcenter.New(configcenter.Config{
     CacheTTL: 30 * time.Second,
     DotenvFiles: []string{".env.local", ".env"},
     Defaults: map[string]string{"db.pool": "10"},
+    OnError: func(err error) {
+        logger.Warn("remote configuration unavailable; using local values", "error", err)
+    },
 })
 if err != nil { return fmt.Errorf("create configuration client: %w", err) }
 if err := client.Load(ctx); err != nil {
-    logger.Warn("configuration source unavailable", "error", err)
+    return fmt.Errorf("load local configuration: %w", err)
 }
 pool := client.Int("db.pool", 10)
 ```
 
-此片段放在持有 `ctx`、`baseURL`、`apiKey` 和 `logger` 的调用方函数中。发生数据源错误时，`Load` 仍合并可用来源并提供快照，同时返回错误，调用方可自行决定是否允许降级启动。过期缓存不会用于降级；没有可用来源时快照为空。context 取消时保留原加载范围和 fallback，但缓存仍按原 TTL 到期。
+此片段放在持有 `ctx`、`baseURL`、`apiKey` 和 `logger` 的调用方函数中。远程读取失败时，`Load` 合并可用来源、发布快照，再在释放内部锁后同步调用错误回调；回调可读取客户端。显式 dotenv 文件缺失、解析失败及调用方 context 取消仍返回错误。过期缓存不会用于降级；没有可用来源时快照为空，可使用 `GetDefault`、`Int`、`Bool` 的默认值。context 取消时保留原加载范围和 fallback，但缓存仍按原 TTL 到期。
 
 `BaseURL` 和 `APIKey` 同时为空时跳过远端；仅填其中一个仍报错。远程请求失败不会将写操作转存到本地。
 
@@ -101,7 +107,9 @@ dotenv 和 `Defaults` 仅作为读取 fallback，不会写入远程缓存。读�
 
 `Put(ctx, key, value)` 在有远端配置时写入远端，成功后更新内存缓存；未配置远端时仅写入当前客户端的内存，同样受 TTL 限制。匹配当前加载前缀的写入可立即读取，其他前缀需重新加载对应范围。远端写入需要 `projects:read`、`environments:read` 和 `config:write`。`IsLocal()` 表示是否未配置远端。配置键遵循服务端的 1–191 字符规则。
 
-`ReadMany(ctx, keys)` 一次请求读取指定键，返回 `map[string]string`，缺失键不在结果中。它直接读取后端，绕过远端缓存和 fallback，不替换加载快照。`PutMany(ctx, values)` 在一个事务中创建或更新所有指定键，并更新缓存；需要的远端权限与 `Put` 相同。每批 1–500 个键，写入请求体最多 1 MiB。
+`ReadMany(ctx, keys)` 一次请求读取指定键，返回 `map[string]string`，缺失键不在结果中。它直接读取后端，绕过远端缓存和 fallback，不替换加载快照；失败仍返回错误，启动时需要回退的读取应使用 `Load` 后调用 `Get`。
+
+`PutMany(ctx, values)` 在一个事务中创建或更新所有指定键，并更新缓存；需要的远端权限与 `Put` 相同。每批 1–500 个键，写入请求体最多 1 MiB。
 
 `EnsureDefaults(ctx, defaults)` 批量读取后端，再通过 `PutMany` 写入缺失项，最后刷新快照；已读取到的值保持不变。它使用现有 `config:read`、`config:write` 权限，SDK 项目定位还需 `projects:read`、`environments:read`。远端首次初始化应由一个实例完成，先读后写不是跨请求事务。低优先级来源已有值不会阻止初始化远端缺失项。未配置远端时只初始化当前客户端中缺失或已过期的内存条目，仍受 TTL 限制；长期 fallback 应使用 `Config.Defaults`。
 
@@ -157,7 +165,7 @@ ConfigCenter 启动时从本地配置打开数据库，再读取 `configcenter/p
 
 | 方法                        | 行为                                               |
 | --------------------------- | -------------------------------------------------- |
-| `Load(ctx)`                 | 合并所有来源，提供可用快照并返回来源错误           |
+| `Load(ctx)`                 | 合并来源；远程失败告警并使用回退，本地错误和取消返回错误 |
 | `LoadPrefix(ctx, "db.")`    | 逐层合并匹配前缀的配置，替换整个快照               |
 | `Get(key)`                  | 返回未过期缓存或已加载的 fallback，不发网络请求    |
 | `GetDefault(key, fallback)` | 缺失时返回默认值；空字符串仍是有效值               |
@@ -183,10 +191,12 @@ if err := client.Watch(watchCtx, configcenter.WatchOptions{
 }
 ```
 
-此片段放在持有 `client`、`ctx` 和 `logger` 的长生命周期函数中，并在该函数结束前运行应用。Watch 会同步执行首次完整 Load；首次失败会返回错误，不启动后台循环。成功后启动后台定时轮询，Interval 小于等于零时使用 30 秒。后续错误调用 OnError，未提供回调时静默重试；有可用 fallback 时快照仍会更新。
+此片段放在持有 `client`、`ctx` 和 `logger` 的长生命周期函数中，并在该函数结束前运行应用。Watch 同步加载首次完整快照；远程失败时使用回退、报告错误并继续启动后台轮询，本地错误或 context 取消则返回错误。Interval 小于等于零时使用 30 秒。首次及后续远程错误优先交给 `WatchOptions.OnError`，否则使用 `Config.OnError`，两者均未设置时输出告警。远端失败不会缓存为空结果，恢复后下一次轮询可立即重新读取。
 
 取消 context 可停止轮询。一个客户端通常只启动一次 Watch。Watch 每次加载全部配置，因此会覆盖 LoadPrefix 得到的过滤快照；它不提供前缀订阅、变更回调或服务端推送。轮询遵守 `CacheTTL`：缓存有效时跳过远端，过期后的下一次轮询才请求远端；在此间隙读取方法使用已加载的 fallback。
 
 ## 错误处理
 
-使用 `errors.Is(err, configcenter.ErrNotFound)` 判断 HTTP 404（例如环境不存在）。其他非 200 状态目前返回包含状态码的普通错误，没有导出的结构化 HTTP 错误类型。`Get` 通过 bool 表示缺失，并不返回 `ErrKeyNotFound`。为启动失败和后台刷新失败分别制定处理策略。
+使用 `errors.Is(err, configcenter.ErrNotFound)` 判断 HTTP 404（例如环境不存在）；快照加载的错误来自回调，直接后端操作的错误来自返回值。其他非 200 状态包含状态码，错误信息不包含响应正文或 API Key。`Get` 通过 bool 表示缺失，并不返回 `ErrKeyNotFound`。
+
+`Load`、`LoadPrefix` 和 `Watch` 的远程故障容错不会改变共享 `LoadSnapshot` / `Sources.Read` 的错误传播行为。`ReadMany`、`Put`、`PutMany`、`EnsureDefaults` 仍对后端错误返回失败，包括初始化后的强制刷新失败；不会因远程不可用而把写入转存本地。

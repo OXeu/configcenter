@@ -166,7 +166,7 @@ func TestRemoteCacheHitsExpiryDeletionAndFailures(t *testing.T) {
 		t.Fatal("fresh cache did not bypass unavailable remote", err)
 	}
 	expireCache(client)
-	if err := client.Load(t.Context()); err == nil || client.GetDefault("key", "") != "default" {
+	if err := client.Load(t.Context()); err != nil || client.GetDefault("key", "") != "default" {
 		t.Fatal("remote failure reused expired data", err)
 	}
 	mode.Store(3)
@@ -184,7 +184,7 @@ func TestRemoteCacheHitsExpiryDeletionAndFailures(t *testing.T) {
 	}
 	server.Close()
 	expireCache(client)
-	if err := client.Load(t.Context()); err == nil || client.GetDefault("key", "") != "default" {
+	if err := client.Load(t.Context()); err != nil || client.GetDefault("key", "") != "default" {
 		t.Fatal("transport failure reused expired data", err)
 	}
 }
@@ -280,8 +280,8 @@ func TestRemoteErrorsDoNotRedirectWrites(t *testing.T) {
 	if client.IsLocal() {
 		t.Fatal("configured client selected local backend")
 	}
-	if err := client.Load(t.Context()); err == nil {
-		t.Fatal("remote failure hidden")
+	if err := client.Load(t.Context()); err != nil {
+		t.Fatal("remote read failure blocked fallback loading", err)
 	}
 	if err := client.Put(t.Context(), "key", "value"); err == nil || client.GetDefault("key", "") != "default" {
 		t.Fatal("remote write redirected to memory", err)

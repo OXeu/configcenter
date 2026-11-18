@@ -13,6 +13,7 @@ Rules for anyone (human or model) changing configcenter. They are enforced where
 - `internal/server` — gin router, REST handlers, MCP endpoint, Go templates (`templates/shell/vue.html`), embedded static files.
 - `web/ui` — Vue 3 single-file components and Tailwind CSS; Vite Plus builds into `.tmp/ui`, embedded by root `assets.go`.
 - `sdk/configcenter` — separate module with the public Go client and shared `DataSource`, `LoadSnapshot` and `Snapshot` abstractions. HTTP and in-process database adapters share configuration merging and lookup behavior; keep database queries in `internal/store`.
+- SDK `Load`, `LoadPrefix` and `Watch` tolerate remote read failures, report them through callbacks or warnings, and use unexpired cache, dotenv and defaults. Local-source errors and caller cancellation remain errors; direct backend reads, writes and default initialization remain strict.
 - `docs/commits.md` — the commit message rules (Conventional Commits 1.0.0 plus this repository's constraints).
 
 ## Commits

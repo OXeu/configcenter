@@ -103,3 +103,20 @@ func TestEnsureDefaultsLocalPreservesExistingValues(t *testing.T) {
 		t.Fatal("local initialization lost values")
 	}
 }
+
+func TestEnsureDefaultsReturnsRefreshFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(r.URL.Query()["keys"]) == 0 {
+			w.WriteHeader(443)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{"items": []Item{{Key: "key", Value: "existing"}}}); err != nil {
+			t.Error(err)
+		}
+	}))
+	defer server.Close()
+	client := testClient(t, Config{BaseURL: server.URL, APIKey: "cc_test", DotenvFiles: []string{}})
+	if err := client.EnsureDefaults(t.Context(), map[string]string{"key": "default"}); err == nil || !strings.Contains(err.Error(), "443") {
+		t.Fatal("default initialization hid its backend refresh failure", err)
+	}
+}

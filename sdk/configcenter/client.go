@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/http"
 	"net/url"
@@ -50,6 +51,9 @@ type Config struct {
 	HTTPClient *http.Client
 	// Timeout overrides the default request timeout of 30 seconds.
 	Timeout time.Duration
+	// OnError reports nonfatal remote failures from Load and LoadPrefix after
+	// publishing fallback values and releasing locks. Nil logs a warning.
+	OnError func(error)
 }
 
 // Item is one configuration entry.
@@ -65,7 +69,8 @@ type Item struct {
 // WatchOptions controls the polling loop.
 type WatchOptions struct {
 	Interval time.Duration
-	// OnError is called for transient failures; nil means retry silently.
+	// OnError reports initial and subsequent source failures. It overrides
+	// Config.OnError for this watcher; nil uses that handler or logs a warning.
 	OnError func(error)
 }
 
@@ -77,6 +82,7 @@ type Client struct {
 	revealSecrets bool
 	env           string
 	http          *http.Client
+	onError       func(error)
 
 	opMu      sync.Mutex
 	mu        sync.RWMutex
@@ -128,6 +134,7 @@ func newClient(cfg Config, env, endpoint string, client *http.Client) *Client {
 		revealSecrets: cfg.RevealSecrets,
 		env:           env,
 		http:          client,
+		onError:       cfg.OnError,
 		cache: memoryCache{
 			entries:  make(map[string]cacheEntry),
 			prefixes: make(map[string]time.Time),
@@ -159,32 +166,39 @@ func (c *Client) valuesPath() string {
 }
 
 // Load merges all sources by priority and replaces the snapshot.
-// Source errors are returned even when fallback values are available.
+// Remote failures are reported through Config.OnError or a warning; local
+// source errors and context cancellation are returned to the caller.
 func (c *Client) Load(ctx context.Context) error {
-	return c.load(ctx, "")
+	return c.load(ctx, "", c.onError)
 }
 
-// LoadPrefix fetches the items whose keys start with prefix.
+// LoadPrefix loads matching keys with the same fallback behavior as Load.
 func (c *Client) LoadPrefix(ctx context.Context, prefix string) error {
-	return c.load(ctx, prefix)
+	return c.load(ctx, prefix, c.onError)
 }
 
-func (c *Client) load(ctx context.Context, prefix string) error {
+func (c *Client) load(ctx context.Context, prefix string, onError func(error)) error {
 	c.opMu.Lock()
-	defer c.opMu.Unlock()
-	return c.loadSnapshot(ctx, prefix, false)
+	remoteErr, localErr := c.loadSnapshot(ctx, prefix, false)
+	c.opMu.Unlock()
+	if localErr != nil {
+		return errors.Join(remoteErr, localErr)
+	}
+	if remoteErr != nil {
+		reportSourceError(ctx, remoteErr, onError)
+	}
+	return nil
 }
 
-func (c *Client) loadSnapshot(ctx context.Context, prefix string, refresh bool) error {
+func (c *Client) loadSnapshot(ctx context.Context, prefix string, refresh bool) (remoteErr, localErr error) {
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("configcenter: load cancelled: %w", err)
+		return nil, fmt.Errorf("configcenter: load cancelled: %w", err)
 	}
 	c.mu.Lock()
 	c.cache.prune(time.Now())
 	covered := c.cache.covers(prefix)
 	c.mu.Unlock()
 	var remote Snapshot
-	var remoteErr error
 	fetch := !c.IsLocal() && (refresh || !covered)
 	if fetch {
 		remote, remoteErr = LoadSnapshot(ctx, prefix, remoteSource{client: c})
@@ -192,7 +206,7 @@ func (c *Client) loadSnapshot(ctx context.Context, prefix string, refresh bool) 
 	fetchedAt := time.Now()
 	fallbacks, fallbackErr := LoadSnapshot(ctx, prefix, c.sources...)
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("configcenter: load cancelled: %w", err)
+		return nil, fmt.Errorf("configcenter: load cancelled: %w", err)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -201,7 +215,15 @@ func (c *Client) loadSnapshot(ctx context.Context, prefix string, refresh bool) 
 	}
 	c.fallbacks = fallbacks
 	c.prefix = prefix
-	return errors.Join(remoteErr, fallbackErr)
+	return remoteErr, fallbackErr
+}
+
+func reportSourceError(ctx context.Context, err error, onError func(error)) {
+	if onError != nil {
+		onError(err)
+		return
+	}
+	slog.WarnContext(ctx, "configcenter configuration source unavailable", "error", err)
 }
 
 func (c *Client) get(ctx context.Context, path string, query url.Values, out any) error {
@@ -293,12 +315,17 @@ func (c *Client) All() []Item {
 }
 
 // Watch reloads on interval until ctx is cancelled. The first load happens
-// before Watch returns control, so callers can use the snapshot right away.
+// before Watch returns control. Remote failures report an error and use local
+// fallbacks without preventing startup or subsequent polling.
 func (c *Client) Watch(ctx context.Context, opts WatchOptions) error {
 	if opts.Interval <= 0 {
 		opts.Interval = 30 * time.Second
 	}
-	if err := c.Load(ctx); err != nil {
+	onError := opts.OnError
+	if onError == nil {
+		onError = c.onError
+	}
+	if err := c.load(ctx, "", onError); err != nil {
 		return err
 	}
 	go func() {
@@ -309,8 +336,11 @@ func (c *Client) Watch(ctx context.Context, opts WatchOptions) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if err := c.Load(ctx); err != nil && opts.OnError != nil {
-					opts.OnError(err)
+				if err := c.load(ctx, "", onError); err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					reportSourceError(ctx, err, onError)
 				}
 			}
 		}

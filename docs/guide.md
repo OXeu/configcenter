@@ -167,7 +167,9 @@ Reads resolve each key in this order:
 
 Empty strings count as configured values. Each client has an isolated memory map; `CacheTTL` defaults to 30 seconds and cache hits never extend it. `Load` and `Watch` skip remote requests when their full scope is cached, and refresh after expiry. Getters reject expired entries and use loaded fallbacks without network requests. No cache is persisted to disk.
 
-`DotenvFiles` defaults to an optional `.env` without changing process environment variables. Source failures return errors while exposing available fallback values. When both remote connection fields are empty, `Put` writes only to memory with the same TTL; partial remote configuration is rejected. See the [SDK guide](sdk.md) for initialization, source composition and error handling.
+`DotenvFiles` defaults to an optional `.env` without changing process environment variables. `Load`, `LoadPrefix` and `Watch` report remote failures through `OnError` or warnings and use available fallbacks; local-source errors and caller cancellation still return errors. Direct backend reads and writes remain strict.
+
+When both remote connection fields are empty, `Put` writes only to memory with the same TTL; partial remote configuration is rejected. See the [SDK guide](sdk.md) for initialization, source composition and error handling.
 
 ## Development
 

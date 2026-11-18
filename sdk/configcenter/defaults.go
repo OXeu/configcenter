@@ -2,6 +2,7 @@ package configcenter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -46,22 +47,23 @@ func (c *Client) ensureDefaults(ctx context.Context, defaults map[string]string)
 			}
 		}
 		c.mu.Unlock()
-		return c.loadSnapshot(ctx, "", false)
-	}
-	existing, err := c.readMany(ctx, batchKeys(defaults))
-	if err != nil {
-		return err
-	}
-	missing := make(map[string]string)
-	for key, value := range defaults {
-		if _, ok := existing[key]; !ok {
-			missing[key] = value
-		}
-	}
-	if len(missing) > 0 {
-		if err := c.putMany(ctx, missing); err != nil {
+	} else {
+		existing, err := c.readMany(ctx, batchKeys(defaults))
+		if err != nil {
 			return err
 		}
+		missing := make(map[string]string)
+		for key, value := range defaults {
+			if _, ok := existing[key]; !ok {
+				missing[key] = value
+			}
+		}
+		if len(missing) > 0 {
+			if err := c.putMany(ctx, missing); err != nil {
+				return err
+			}
+		}
 	}
-	return c.loadSnapshot(ctx, "", true)
+	remoteErr, localErr := c.loadSnapshot(ctx, "", !c.IsLocal())
+	return errors.Join(remoteErr, localErr)
 }

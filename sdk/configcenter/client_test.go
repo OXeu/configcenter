@@ -3,6 +3,7 @@ package configcenter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -50,12 +51,13 @@ func TestMissingProjectIsNotFound(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client, err := New(Config{DotenvFiles: []string{}, BaseURL: srv.URL, APIKey: "cc_test", Environment: "staging"})
+	var reported error
+	client, err := New(Config{DotenvFiles: []string{}, BaseURL: srv.URL, APIKey: "cc_test", Environment: "staging", OnError: func(err error) { reported = err }})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
-	if err := client.Load(context.Background()); err == nil {
-		t.Fatal("expected an error for a 404 response")
+	if err := client.Load(t.Context()); err != nil || !errors.Is(reported, ErrNotFound) {
+		t.Fatal("404 was not reported separately from startup loading", err, reported)
 	}
 }
 

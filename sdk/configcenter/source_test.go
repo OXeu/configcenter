@@ -141,7 +141,7 @@ func TestRemotePutCachesOnlySuccessfulWrites(t *testing.T) {
 	if err := client.Put(t.Context(), "key", "rejected"); err == nil {
 		t.Fatal("failed write accepted")
 	}
-	if err := client.Load(t.Context()); err == nil || client.GetDefault("key", "") != "written" {
+	if err := client.Load(t.Context()); err != nil || client.GetDefault("key", "") != "written" {
 		t.Fatal("cache did not preserve successful write", err)
 	}
 }

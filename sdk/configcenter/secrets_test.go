@@ -55,12 +55,13 @@ func TestSecretReadDenialDoesNotFallBackToOrdinaryRead(t *testing.T) {
 		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer srv.Close()
-	client, err := New(Config{BaseURL: srv.URL, APIKey: "cc_test", RevealSecrets: true, DotenvFiles: []string{}})
+	var reported error
+	client, err := New(Config{BaseURL: srv.URL, APIKey: "cc_test", RevealSecrets: true, DotenvFiles: []string{}, OnError: func(err error) { reported = err }})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := client.Load(t.Context()); err == nil || calls != 1 {
-		t.Fatal("denied privileged read was silently retried")
+	if err := client.Load(t.Context()); err != nil || reported == nil || calls != 1 {
+		t.Fatal("denied privileged read was not reported or was retried")
 	}
 	if _, ok := client.Get("token"); ok {
 		t.Fatal("denied read populated the cache")
