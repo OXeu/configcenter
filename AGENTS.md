@@ -67,6 +67,7 @@ Shared `no-restricted-files` lint permits documentation only in top-level `docs/
    - Native `<input type="checkbox">` is forbidden, including bound types and attribute spreads that cannot rule out checkbox inputs.
    - Use `CheckboxField` for boolean or multiple-choice fields inside dialogs.
    - Dropdowns use `DropdownMenu` or `DropdownSelect`.
+   - A dialog must not contain only one dropdown field. Open a `DropdownMenu` directly for a single choice; use a separate confirmation dialog when saving requires confirmation. Shared lint checks templates and statically defined `createForm().show()` fields.
    - Their panels use the shared `.dropdown-panel` fixed positioning and `useDropdownPosition`; opening a dropdown must not insert content into normal flow, resize surrounding content or change a parent's overflow.
    - Template and CSS lint reject custom panels and position overrides, including responsive overrides.
 3. **Reuse styles.** Use the `.card`, `.btn`, `.field`, `.input`, `.table`, `.badge` and `.tabs-trigger` classes in `web/ui/theme.css`. Avoid decorative wrappers and duplicate state markup.
