@@ -94,6 +94,7 @@
   "error.unauthorized": "请重新登录。",
   "error.badRequest": "请检查表单内容。",
   "login.error.oauth_disabled": "此服务器未配置 OAuth 登录。",
+  "login.error.oauth_unavailable": "身份提供方暂时不可用，请稍后重试。",
   "login.error.denied": "身份提供方拒绝了登录。",
   "login.error.missing_state": "登录尝试已过期，请重试。",
   "login.error.oauth_failed": "无法验证来自身份提供方的登录。",

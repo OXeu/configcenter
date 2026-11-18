@@ -19,12 +19,11 @@ type Provider interface {
 	Finish(ctx context.Context, code, state, stateBlob string) (Claims, error)
 }
 
-// NewProvider builds the configured provider, or a nil provider when OAuth is
-// disabled; callers must check the returned error before using an interface
-// value, so disabled returns a typed-nil wrapper instead of (nil, nil).
-func NewProvider(ctx context.Context, cfg Config) (Provider, error) {
+// NewProvider builds the configured provider without contacting the issuer.
+// Discovery runs on login requests; an unconfigured provider returns nil.
+func NewProvider(cfg Config) Provider {
 	if !cfg.Enabled() {
-		return nil, nil //nolint:nilnil // a disabled provider is a valid, documented state
+		return nil
 	}
 	client := oauth.New(oauth.Config{
 		IssuerURL:    cfg.IssuerURL,
@@ -34,10 +33,7 @@ func NewProvider(ctx context.Context, cfg Config) (Provider, error) {
 		RedirectURL:  cfg.RedirectURL,
 		GroupsClaim:  cfg.GroupsClaim,
 	}, nil)
-	if _, err := client.Metadata(ctx); err != nil {
-		return nil, fmt.Errorf("oauth provider: %w", err)
-	}
-	return adapter{client}, nil
+	return adapter{client}
 }
 
 type adapter struct{ *oauth.Client }

@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,8 +28,10 @@ import (
 )
 
 type fakeIdP struct {
-	key    *rsa.PrivateKey
-	server *httptest.Server
+	key               *rsa.PrivateKey
+	server            *httptest.Server
+	discoveryStatus   atomic.Int32
+	discoveryRequests atomic.Int32
 	// lastNonce is captured from the authorize request and echoed in the id token.
 	lastNonce       string
 	bindNonce       bool
@@ -46,6 +49,11 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 	idp := &fakeIdP{key: key, bindNonce: true, picture: "https://images.example.com/dana.png", userinfoSubject: "u-1"}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
+		idp.discoveryRequests.Add(1)
+		if status := idp.discoveryStatus.Load(); status != 0 {
+			http.Error(w, "private-provider-response", int(status))
+			return
+		}
 		base := idp.server.URL
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"issuer":                 base,

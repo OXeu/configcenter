@@ -8,6 +8,7 @@ Rules for anyone (human or model) changing configcenter. They are enforced where
 - `internal/config` — reads every environment variable here and nowhere else. Read `.env.local` (or `CC_ENV_FILE`) without modifying process variables. Database connection and first administrator settings stay local; runtime values prefer the database, exported variables, the env file and defaults. Database errors, cancellation and invalid configuration fail startup.
 - `internal/store` — gorm models and all queries; one `Store` method per query.
 - `internal/auth` — sessions, roles, CSRF, API-key and agent middleware, OAuth provider adapter.
+- OAuth provider construction never contacts the issuer. Discovery runs on login requests; provider outages must not block startup, existing sessions or API-key access. Failed login attempts log the error and remain retryable.
 - `center-common/oauth` — the shared RFC 6749 + OIDC client (discovery, PKCE, id_token verification, userinfo fallback).
 - `internal/server` — gin router, REST handlers, MCP endpoint, Go templates (`templates/shell/vue.html`), embedded static files.
 - `web/ui` — Vue 3 single-file components and Tailwind CSS; Vite Plus builds into `.tmp/ui`, embedded by root `assets.go`.

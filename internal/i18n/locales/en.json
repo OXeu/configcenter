@@ -94,6 +94,7 @@
   "error.unauthorized": "Sign in again to continue.",
   "error.badRequest": "Check the form values.",
   "login.error.oauth_disabled": "OAuth login is not configured on this server.",
+  "login.error.oauth_unavailable": "The identity provider is temporarily unavailable. Please try again later.",
   "login.error.denied": "The identity provider refused the login.",
   "login.error.missing_state": "The login attempt expired, please try again.",
   "login.error.oauth_failed": "Could not verify the login with the identity provider.",

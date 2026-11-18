@@ -51,10 +51,10 @@ func Engine(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 }
 
 func newServer(ctx context.Context, cfg config.Config, st *store.Store, log *slog.Logger) (*Server, error) {
-	provider, err := auth.NewProvider(ctx, cfg.OAuth)
-	if err != nil {
-		return nil, fmt.Errorf("configure oauth: %w", err)
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("configure server: %w", err)
 	}
+	provider := auth.NewProvider(cfg.OAuth)
 	catalog, err := i18n.Shared()
 	if err != nil {
 		return nil, fmt.Errorf("load messages: %w", err)

@@ -28,6 +28,8 @@ CC_OAUTH_CLIENT_SECRET=... \
 
 Open http://127.0.0.1:8080. Without OAuth configured the server still starts; only the login link is disabled.
 
+OAuth discovery runs when a login is attempted, so an unavailable identity provider does not delay or prevent startup. Failed attempts log a warning and display a translated retry message. Existing sessions and API keys remain usable; a later login retries discovery without restarting the service.
+
 GitHub can be used as the identity provider with `CC_OAUTH_ISSUER=https://github.com` and an OAuth app with callback `CC_PUBLIC_URL/oauth/callback`. GitHub publishes no OIDC discovery document, so the client:
 
 - Falls back to GitHub's documented OAuth endpoints.

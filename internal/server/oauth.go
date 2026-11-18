@@ -61,6 +61,7 @@ func (s *Server) startOAuth(c *gin.Context, requestID string) {
 	}
 	redirectURL, stateBlob, err := s.oauth.Start(c.Request.Context())
 	if err != nil {
+		s.log.Warn("oauth provider unavailable", "error", err)
 		s.redirectWithError(c, "oauth_unavailable")
 		return
 	}
