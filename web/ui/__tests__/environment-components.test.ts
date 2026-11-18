@@ -70,6 +70,105 @@ async function settle() {
   await vi.dynamicImportSettled()
   await flushPromises()
 }
+it('opens the environment menu directly and loads the selected environment without a dialog', async () => {
+  const wrapper = await render(false)
+  await wrapper
+    .findAll('button')
+    .find((button) => button.text() === 'Items')!
+    .trigger('click')
+  await flushPromises()
+  fetchMock.mockClear()
+  const trigger = wrapper.get('button[aria-label="Environment: staging"]')
+  await trigger.trigger('click')
+  expect(trigger.attributes('aria-expanded')).toBe('true')
+  expect(wrapper.find('dialog').exists()).toBe(false)
+  const panel = wrapper.get('.dropdown-panel')
+  expect(panel.text()).toContain('Production (production)')
+  expect(panel.text()).toContain('— Primary')
+  expect(panel.get('[aria-pressed="true"]').text()).toBe('Staging (staging)')
+  expect(fetchMock).not.toHaveBeenCalled()
+  await panel.get('[aria-pressed="false"]').trigger('click')
+  await settle()
+  expect(wrapper.find('dialog').exists()).toBe(false)
+  expect(wrapper.find('.dropdown-panel').exists()).toBe(false)
+  expect(wrapper.text()).toContain('Environment: production')
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/v1/projects/billing/environments/production/items',
+    expect.objectContaining({ method: 'GET' }),
+  )
+  wrapper.unmount()
+})
+it('closes the environment menu with Escape without switching', async () => {
+  const wrapper = await render()
+  fetchMock.mockClear()
+  const trigger = wrapper.get('button[aria-label="Environment: staging"]')
+  await trigger.trigger('click')
+  await trigger.trigger('keydown', { key: 'Escape' })
+  expect(trigger.attributes('aria-expanded')).toBe('false')
+  expect(wrapper.find('dialog').exists()).toBe(false)
+  expect(fetchMock).not.toHaveBeenCalled()
+  wrapper.unmount()
+})
+it.each([
+  {
+    page: 'users' as const,
+    rows: [{ id: 9, email: 'user@example.com', role: 'user' }],
+    label: 'Admin',
+    url: '/api/v1/users/9',
+    method: 'PATCH',
+    body: { role: 'admin' },
+  },
+  {
+    page: 'settings' as const,
+    rows: [{ key: 'allow_registration', value: false }],
+    label: 'Allowed',
+    url: '/api/v1/settings',
+    method: 'PUT',
+    body: { allow_registration: true },
+  },
+])(
+  'selects $page choices directly and preserves save confirmation and cancellation',
+  async ({ page, rows, label, url, method, body }) => {
+    const pageData = { ...data, page, isAdmin: true }
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ [page]: rows }) })
+    const wrapper = mount(WorkspacePage, {
+      props: { data: pageData, page: createPage(pageData), title: page },
+    })
+    await flushPromises()
+    fetchMock.mockClear()
+    const trigger = wrapper.get('button[aria-label="Edit"]')
+    await trigger.trigger('click')
+    expect(wrapper.find('dialog').exists()).toBe(false)
+    const select = async () => {
+      await wrapper
+        .get('.dropdown-panel')
+        .findAll('button')
+        .find((button) => button.text() === label)!
+        .trigger('click')
+      await settle()
+    }
+    await select()
+    expect(wrapper.get('dialog').text()).toContain(label)
+    expect(wrapper.find('dialog .dropdown').exists()).toBe(false)
+    expect(fetchMock).not.toHaveBeenCalled()
+    await wrapper.get('dialog button[type="button"]').trigger('click')
+    await settle()
+    expect(fetchMock).not.toHaveBeenCalled()
+    await trigger.trigger('click')
+    await select()
+    await wrapper.get('dialog form').trigger('submit')
+    await settle()
+    expect(fetchMock).toHaveBeenCalledWith(
+      url,
+      expect.objectContaining({
+        method,
+        body: JSON.stringify(body),
+        headers: expect.objectContaining({ 'X-CSRF-Token': 'csrf' }),
+      }),
+    )
+    wrapper.unmount()
+  },
+)
 it('confirms environment renaming, preserves cancellation and follows the selected slug', async () => {
   const wrapper = await render()
   const row = wrapper.findAll('tbody tr')[1]

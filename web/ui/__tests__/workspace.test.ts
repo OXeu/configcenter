@@ -88,15 +88,42 @@ describe('workspace mutations', () => {
   })
   it('changes environment before requesting its items', async () => {
     const w = createWorkspace(data, createPage(data))
-    w.environment()
-    w.form.values.env = 'staging'
-    await w.form.submit()
+    w.state.environments = [{ slug: 'staging', name: 'Staging', is_primary: false }]
+    await w.environment('staging')
+    expect(w.form.open).toBe(false)
     expect(fetchMock.mock.calls[1][0]).toContain('/environments/staging/items')
+  })
+  it('ignores current, unknown and busy environment selections', async () => {
+    const w = createWorkspace(data, createPage(data))
+    w.state.environments = [{ slug: 'staging', name: 'Staging', is_primary: false }]
+    await w.environment('production')
+    await w.environment('unknown')
+    w.state.busy = true
+    await w.environment('staging')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(w.state.env).toBe('production')
+  })
+  it('reports failed environment reads and permits retrying', async () => {
+    const page = createPage(data)
+    const report = vi.spyOn(page, 'report')
+    const w = createWorkspace(data, page)
+    w.state.environments = [{ slug: 'staging', name: 'Staging', is_primary: false }]
+    w.state.rows = [{ key: 'old' }]
+    const error = new TypeError('Failed to fetch')
+    fetchMock.mockRejectedValueOnce(error)
+    await w.environment('staging')
+    expect(report).toHaveBeenCalledWith(error)
+    expect(w.state.rows).toEqual([])
+    expect(w.state.busy).toBe(false)
+    expect(w.form.open).toBe(false)
+    await w.refresh()
+    expect(fetchMock.mock.calls.at(-1)![0]).toContain('/environments/staging/items')
   })
   it('updates user roles through the admin API', async () => {
     const w = createWorkspace({ ...data, page: 'users' }, createPage(data))
-    w.edit({ id: 9, role: 'user' })
-    w.form.values.role = 'admin'
+    w.choose({ id: 9, role: 'user', email: 'user@example.com' }, 'admin')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(w.form.fields).toEqual([])
     await w.form.submit()
     expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/users/9')
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'PATCH', body: '{"role":"admin"}' })

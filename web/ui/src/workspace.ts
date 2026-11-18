@@ -119,14 +119,30 @@ export function createWorkspace(
     state.rows = []
     await refresh()
   }
-  const roles = () => ({
-    key: 'role',
-    label: 'dialog.role',
-    options: ['user', 'admin'].map((value) => ({
+  function editChoices(row: any) {
+    if (data.page === 'settings')
+      return ['true', 'false'].map((value) => ({
+        value,
+        label: page.msg(value === 'true' ? 'settings.allowed' : 'settings.closed'),
+        selected: !row.secret && String(row.value) === value,
+      }))
+    return ['user', 'admin'].map((value) => ({
       value,
       label: page.msg(`role.${value}`),
-    })),
-  })
+      selected: row.role === value,
+    }))
+  }
+  function choose(row: any, value: string) {
+    if (state.busy || !['settings', 'users'].includes(data.page)) return
+    const choice = editChoices(row).find((option) => option.value === value)
+    if (!choice) return
+    form.show(`${page.msg('common.edit')}: ${choice.label}`, [], {}, async () => {
+      if (data.page === 'settings')
+        await mutate(path(), 'PUT', { allow_registration: value === 'true' })
+      else await mutate(`${path()}/${row.id}`, 'PATCH', { role: value })
+    })
+    form.description = data.page === 'settings' ? page.msg('settings.registration') : row.email
+  }
   /** @param {string} url @param {string} method @param {unknown} [body] */
   async function mutate(url: string, method: string, body?: unknown) {
     const result = await api(url, { method, body, csrf: page.csrf })
@@ -136,31 +152,9 @@ export function createWorkspace(
   }
   /** @param {any} [row] */
   function edit(row?: any) {
+    if (['settings', 'users'].includes(data.page)) return
     if (state.tab === 'environments') {
       newEnvironment()
-      return
-    }
-    if (data.page === 'settings') {
-      form.show(
-        page.msg('common.edit'),
-        [
-          {
-            key: 'allowed',
-            label: 'settings.registration',
-            required: true,
-            options: [
-              { value: 'true', label: page.msg('settings.allowed') },
-              { value: 'false', label: page.msg('settings.closed') },
-            ],
-          },
-        ],
-        { allowed: row.secret ? '' : String(row.value) },
-        async () => {
-          if (!['true', 'false'].includes(form.values.allowed))
-            throw new Error(page.msg('settings.chooseRegistration'), { cause: 422 })
-          await mutate(path(), 'PUT', { allow_registration: form.values.allowed === 'true' })
-        },
-      )
       return
     }
     if (state.tab === 'keys') {
@@ -183,11 +177,6 @@ export function createWorkspace(
         url += '/' + enc(row.slug)
         method = 'PATCH'
       }
-    } else if (data.page === 'users') {
-      fields = [roles()]
-      values = { role: row.role }
-      url += '/' + row.id
-      method = 'PATCH'
     } else {
       fields = [
         field('key', 'dialog.itemKey'),
@@ -343,27 +332,12 @@ export function createWorkspace(
     })
     form.description = page.msg('environments.primaryHelp')
   }
-  /** @returns {void} */
-  function environment(): void {
-    form.show(
-      page.msg('projects.environment'),
-      [
-        {
-          key: 'env',
-          label: 'projects.environment',
-          options: state.environments.map((e) => ({
-            value: e.slug,
-            label: `${e.name} (${e.slug})${e.is_primary ? ` — ${page.msg('environments.primary')}` : ''}`,
-          })),
-        },
-      ],
-      { env: state.env },
-      async () => {
-        state.env = form.values.env
-        state.rows = []
-        await load()
-      },
-    )
+  async function environment(slug: string): Promise<void> {
+    if (state.busy || state.env === slug || !state.environments.some((env) => env.slug === slug))
+      return
+    state.env = slug
+    state.rows = []
+    await refresh()
   }
   /** @returns {void} */
   function newEnvironment(): void {
@@ -388,6 +362,8 @@ export function createWorkspace(
     remove,
     review,
     environment,
+    editChoices,
+    choose,
     newEnvironment,
     setPrimaryEnvironment,
   }

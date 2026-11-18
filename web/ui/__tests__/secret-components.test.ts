@@ -223,11 +223,14 @@ describe('secret configuration', () => {
 
   it('does not replace a masked registration setting without an explicit selection', async () => {
     const workspace = createWorkspace({ ...data, page: 'settings' }, createPage(data))
-    workspace.edit({ key: 'allow_registration', secret: true, value: '****' })
-    await workspace.form.submit()
+    const setting = { key: 'allow_registration', secret: true, value: '****' }
+    expect(workspace.editChoices(setting).every((choice) => !choice.selected)).toBe(true)
+    workspace.choose(setting, '')
+    expect(workspace.form.open).toBe(false)
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(workspace.form.error).toBe('Choose a registration policy.')
-    workspace.form.values.allowed = 'true'
+    workspace.choose(setting, 'true')
+    expect(workspace.form.fields).toEqual([])
+    expect(fetchMock).not.toHaveBeenCalled()
     await workspace.form.submit()
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ allow_registration: true })
   })
