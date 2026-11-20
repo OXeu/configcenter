@@ -61,12 +61,16 @@ func (c *Client) readMany(ctx context.Context, keys []string) (map[string]string
 	}
 	values := make(map[string]string, len(keys))
 	if c.IsLocal() {
-		c.mu.RLock()
-		defer c.mu.RUnlock()
-		now := time.Now()
-		for _, key := range keys {
-			if item, ok := c.cache.get(key, now); ok {
-				values[key] = item.Value
+		items, err := c.localItems()
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			values[item.Key] = item.Value
+		}
+		for key := range values {
+			if !slices.Contains(keys, key) {
+				delete(values, key)
 			}
 		}
 		return values, nil
@@ -113,8 +117,7 @@ func (c *Client) putMany(ctx context.Context, values map[string]string) error {
 		items = append(items, Item{Key: key, Value: values[key], UpdatedAt: time.Now().UTC()})
 	}
 	if c.IsLocal() {
-		c.cachePutMany(items)
-		return nil
+		return c.cachePutMany(ctx, items)
 	}
 	path, err := c.environmentPath(ctx)
 	if err != nil {
@@ -147,19 +150,31 @@ func (c *Client) putMany(ctx context.Context, values map[string]string) error {
 	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("configcenter: batch write status %d", resp.StatusCode)
 	}
-	c.cachePutMany(items)
-	return nil
+	return c.cachePutMany(ctx, items)
 }
 
-func (c *Client) cachePutMany(items []Item) {
+func (c *Client) cachePutMany(ctx context.Context, items []Item) error {
 	now := time.Now()
 	c.mu.Lock()
 	c.cache.prune(now)
 	for _, item := range items {
-		c.cache.put(item, now)
+		if c.IsLocal() {
+			c.cache.putDurable(item)
+		} else {
+			c.cache.put(item, now)
+		}
 	}
 	c.cache.dropRevisions()
 	snapshot := c.fileSnapshotLocked(c.prefix, now)
+	durable := c.IsLocal()
+	durableItems := c.cache.all("")
 	c.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("configcenter: write cancelled: %w", err)
+	}
+	if durable {
+		return c.persistDurable(durableItems)
+	}
 	c.persistSnapshot(snapshot)
+	return nil
 }

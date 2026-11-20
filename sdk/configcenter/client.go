@@ -203,11 +203,45 @@ func (c *Client) reload(ctx context.Context, prefix string, refresh bool) (bool,
 	return c.reloadLocked(ctx, prefix, refresh)
 }
 
+// reloadLocalLocked publishes the durable local snapshot. The cache file is the
+// authoritative store in local mode, so every load rereads it.
+func (c *Client) reloadLocalLocked(ctx context.Context, prefix string) (bool, error, error) {
+	c.mu.Lock()
+	before := revisionOf(c.configurationLocked(prefix))
+	c.mu.Unlock()
+	items, loadErr := c.localItems()
+	fallbacks, fallbackErr := LoadSnapshot(ctx, prefix, c.sources...)
+	if err := ctx.Err(); err != nil {
+		return false, nil, fmt.Errorf("configcenter: load cancelled: %w", err)
+	}
+	c.mu.Lock()
+	c.cache.replaceDurable(items, time.Now())
+	c.fallbacks = fallbacks
+	c.prefix = prefix
+	changed := before != revisionOf(c.configurationLocked(prefix))
+	c.mu.Unlock()
+	return changed, loadErr, fallbackErr
+}
+
+// localItems returns the durable local content, preferring the cache file and
+// falling back to the in-memory values when no file is configured.
+func (c *Client) localItems() ([]Item, error) {
+	if c.cacheFile == "" {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		return c.cache.all(""), nil
+	}
+	return readDurableSnapshot(c.cacheFile, c.env)
+}
+
 // reloadLocked is reload without taking the operation lock; callers that
 // already hold it keep writes and reads ordered.
 func (c *Client) reloadLocked(ctx context.Context, prefix string, refresh bool) (bool, error, error) {
 	if err := ctx.Err(); err != nil {
 		return false, nil, fmt.Errorf("configcenter: load cancelled: %w", err)
+	}
+	if c.IsLocal() {
+		return c.reloadLocalLocked(ctx, prefix)
 	}
 	now := time.Now()
 	c.mu.Lock()
@@ -528,6 +562,17 @@ func (c *Client) fileSnapshotLocked(prefix string, now time.Time) fileSnapshot {
 		snapshot.Revision = scope.revision
 	}
 	return snapshot
+}
+
+// persistDurable writes the authoritative local-mode store.
+func (c *Client) persistDurable(items []Item) error {
+	if c.cacheFile == "" {
+		return nil
+	}
+	if err := writeDurableSnapshot(c.cacheFile, c.env, items); err != nil {
+		return fmt.Errorf("configcenter: save local configuration: %w", err)
+	}
+	return nil
 }
 
 func (c *Client) persistSnapshot(snapshot fileSnapshot) {

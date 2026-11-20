@@ -38,16 +38,29 @@ func (c *Client) EnsureDefaults(ctx context.Context, defaults map[string]string)
 
 func (c *Client) ensureDefaults(ctx context.Context, defaults map[string]string) error {
 	if c.IsLocal() {
-		c.mu.Lock()
+		existing, err := c.localItems()
+		if err != nil {
+			return err
+		}
 		now := time.Now()
-		c.cache.prune(now)
+		items := make([]Item, 0, len(existing)+len(defaults))
+		present := make(map[string]bool, len(existing))
+		for _, item := range existing {
+			items = append(items, item)
+			present[item.Key] = true
+		}
 		for key, value := range defaults {
-			if _, exists := c.cache.get(key, now); !exists {
-				c.cache.put(Item{Key: key, Value: value, UpdatedAt: now.UTC()}, now)
+			if !present[key] {
+				items = append(items, Item{Key: key, Value: value, UpdatedAt: now.UTC()})
 			}
 		}
+		c.mu.Lock()
+		c.cache.replaceDurable(items, now)
 		c.cache.dropRevisions()
 		c.mu.Unlock()
+		if err := c.persistDurable(items); err != nil {
+			return err
+		}
 	} else {
 		existing, err := c.readMany(ctx, batchKeys(defaults))
 		if err != nil {

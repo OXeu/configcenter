@@ -41,7 +41,7 @@ func newMemoryCache(ttl time.Duration) memoryCache {
 // server confirmed or replaces it with the changed payload.
 func (c *memoryCache) prune(now time.Time) {
 	for key, entry := range c.entries {
-		if now.Before(entry.expiresAt) || c.covered(key) {
+		if entry.expiresAt.IsZero() || now.Before(entry.expiresAt) || c.covered(key) {
 			continue
 		}
 		delete(c.entries, key)
@@ -87,11 +87,38 @@ func (c *memoryCache) scope(prefix string) (cacheScope, bool) {
 
 func (c *memoryCache) get(key string, now time.Time) (Item, bool) {
 	entry, ok := c.entries[key]
-	return entry.item, ok && now.Before(entry.expiresAt)
+	if !ok {
+		return Item{}, false
+	}
+	return entry.item, entry.expiresAt.IsZero() || now.Before(entry.expiresAt)
 }
 
 func (c *memoryCache) put(item Item, now time.Time) {
 	c.entries[item.Key] = cacheEntry{item: item, expiresAt: now.Add(c.ttl)}
+}
+
+// putDurable stores an item that never expires. It backs the local-only mode,
+// where the snapshot file is the authoritative store rather than a remote cache.
+func (c *memoryCache) putDurable(item Item) {
+	c.entries[item.Key] = cacheEntry{item: item}
+}
+
+// replaceDurable makes durable items the complete local content while keeping
+// still valid expiring entries written by a remote client of the same process.
+func (c *memoryCache) replaceDurable(items []Item, now time.Time) {
+	kept := make(map[string]cacheEntry, len(items))
+	for _, item := range items {
+		kept[item.Key] = cacheEntry{item: item}
+	}
+	for key, entry := range c.entries {
+		if _, exists := kept[key]; exists {
+			continue
+		}
+		if entry.expiresAt.IsZero() || now.Before(entry.expiresAt) {
+			kept[key] = entry
+		}
+	}
+	c.entries = kept
 }
 
 // store records a fetched payload as the authoritative content of prefix.

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -336,4 +337,53 @@ func loadPersisted(t *testing.T, path string) fileSnapshot {
 		t.Fatal(err)
 	}
 	return persisted
+}
+
+func TestLocalModePersistsAcrossClients(t *testing.T) {
+	path := filepath.Join(filepath.Dir(cacheFilePath(t)), "local-store.json")
+	first := testClient(t, Config{DotenvFiles: []string{}, CacheFile: path})
+	if first.IsLocal() != true {
+		t.Fatal("no remote configuration was not treated as local")
+	}
+	if err := first.Put(t.Context(), "key", "value"); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.PutMany(t.Context(), map[string]string{"batch.one": "1", "batch.two": "2"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.EnsureDefaults(t.Context(), map[string]string{"key": "ignored", "defaulted": "value"}); err != nil {
+		t.Fatal(err)
+	}
+	second := testClient(t, Config{DotenvFiles: []string{}, CacheFile: path})
+	if err := second.Load(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"key": "value", "batch.one": "1", "batch.two": "2", "defaulted": "value"}
+	if got := snapshotValues(second.All()); !reflect.DeepEqual(got, want) {
+		t.Fatalf("local store = %#v, want %#v", got, want)
+	}
+	values, err := second.ReadMany(t.Context(), []string{"key", "batch.one", "missing"})
+	if err != nil || !reflect.DeepEqual(values, map[string]string{"key": "value", "batch.one": "1"}) {
+		t.Fatal("local batch read did not use the durable store", values, err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := second.Put(ctx, "cancelled", "value"); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled local write ignored its context", err)
+	}
+}
+
+func TestLocalStoreIsEnvironmentScoped(t *testing.T) {
+	path := filepath.Join(filepath.Dir(cacheFilePath(t)), "local-env.json")
+	production := testClient(t, Config{DotenvFiles: []string{}, CacheFile: path})
+	if err := production.Put(t.Context(), "key", "production"); err != nil {
+		t.Fatal(err)
+	}
+	staging := testClient(t, Config{Environment: "staging", DotenvFiles: []string{}, CacheFile: path})
+	if err := staging.Load(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := staging.Get("key"); ok {
+		t.Fatal("local store leaked across environments")
+	}
 }

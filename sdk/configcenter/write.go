@@ -42,8 +42,7 @@ func (c *Client) put(ctx context.Context, key, value string) error {
 		return err
 	}
 	if c.IsLocal() {
-		c.cachePut(Item{Key: key, Value: value, UpdatedAt: time.Now().UTC()})
-		return nil
+		return c.cachePut(ctx, Item{Key: key, Value: value, UpdatedAt: time.Now().UTC()})
 	}
 	path, err := c.environmentPath(ctx)
 	if err != nil {
@@ -71,8 +70,7 @@ func (c *Client) put(ctx context.Context, key, value string) error {
 		return fmt.Errorf("configcenter: write status %d", resp.StatusCode)
 	}
 	item := Item{Key: key, Value: value, UpdatedAt: time.Now().UTC()}
-	c.cachePut(item)
-	return nil
+	return c.cachePut(ctx, item)
 }
 
 func (c *Client) environmentPath(ctx context.Context) (string, error) {
@@ -90,13 +88,26 @@ func (c *Client) environmentPath(ctx context.Context) (string, error) {
 	return strings.TrimSuffix(c.endpoint, "/agent") + "/projects/" + url.PathEscape(scope.Project.Slug) + "/environments/" + url.PathEscape(c.env), nil
 }
 
-func (c *Client) cachePut(item Item) {
+func (c *Client) cachePut(ctx context.Context, item Item) error {
 	now := time.Now()
 	c.mu.Lock()
 	c.cache.prune(now)
-	c.cache.put(item, now)
+	if c.IsLocal() {
+		c.cache.putDurable(item)
+	} else {
+		c.cache.put(item, now)
+	}
 	c.cache.dropRevisions()
 	snapshot := c.fileSnapshotLocked(c.prefix, now)
+	durable := c.IsLocal()
+	durableItems := c.cache.all("")
 	c.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("configcenter: write cancelled: %w", err)
+	}
+	if durable {
+		return c.persistDurable(durableItems)
+	}
 	c.persistSnapshot(snapshot)
+	return nil
 }

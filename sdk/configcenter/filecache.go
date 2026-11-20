@@ -105,3 +105,42 @@ func revisionOf(items []Item, extra ...string) string {
 	}
 	return "\"" + hex.EncodeToString(hash.Sum(nil)) + "\""
 }
+
+// readDurableSnapshot returns the items of a local-mode store. A missing file
+// yields an empty slice so callers can treat it as a first run.
+func readDurableSnapshot(path, environment string) ([]Item, error) {
+	if path == "" {
+		return nil, nil
+	}
+	persisted, err := readFileSnapshot(path)
+	if err != nil {
+		return nil, err
+	}
+	if persisted.Environment != environment {
+		return nil, nil
+	}
+	items := make([]Item, 0, len(persisted.Items))
+	for _, item := range persisted.Items {
+		if validateKey(item.Key) == nil {
+			items = append(items, item)
+		}
+	}
+	return items, nil
+}
+
+// writeDurableSnapshot replaces the local-mode store with items.
+func writeDurableSnapshot(path, environment string, items []Item) error {
+	if path == "" {
+		return nil
+	}
+	encoded, err := encodeFileSnapshot(fileSnapshot{
+		Version:     fileCacheVersion,
+		Environment: environment,
+		FetchedAt:   time.Now().UTC(),
+		Items:       items,
+	})
+	if err != nil {
+		return err
+	}
+	return writeFileSnapshot(path, encoded)
+}

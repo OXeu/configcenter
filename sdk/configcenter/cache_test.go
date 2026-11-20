@@ -76,14 +76,11 @@ func TestMemoryTTLDoesNotSlideOnReads(t *testing.T) {
 					t.Fatal("cache expired early", err)
 				}
 				time.Sleep(time.Nanosecond)
-				if client.GetDefault("key", "") != "default" || len(client.All()) != 1 {
-					t.Fatal("getters exposed expired entries or reads extended TTL")
+				if client.GetDefault("key", "") != "memory" || len(client.All()) != 2 {
+					t.Fatal("local writes expired with the remote cache TTL")
 				}
-				if _, ok := client.Get("only_memory"); ok {
-					t.Fatal("expired memory value remained visible")
-				}
-				if err := client.Load(t.Context()); err != nil || len(client.cache.entries) != 0 {
-					t.Fatal("expired entries were not cleaned up", err)
+				if _, ok := client.Get("only_memory"); !ok {
+					t.Fatal("durable local value vanished")
 				}
 			})
 		})
@@ -107,8 +104,8 @@ func TestFallbackPriorityAndEmptyValues(t *testing.T) {
 	file := dotenvTestFile(t, "memory=dotenv\nmemory_empty=dotenv\nremote=dotenv\nremote_empty=dotenv\ndotenv='dotenv value'\ndotenv_empty=\ninvalid_int=10\n")
 	defaults := map[string]string{"memory": "default", "remote": "default", "dotenv": "default", "dotenv_empty": "default", "default": "default-value", "invalid_int": "20"}
 	client := testClient(t, Config{BaseURL: server.URL, APIKey: "cc_test", DotenvFiles: []string{file}, Defaults: defaults})
-	client.cachePut(Item{Key: "memory", Value: "memory-value"})
-	client.cachePut(Item{Key: "memory_empty", Value: ""})
+	client.cachePut(t.Context(), Item{Key: "memory", Value: "memory-value"})
+	client.cachePut(t.Context(), Item{Key: "memory_empty", Value: ""})
 	defaults["default"] = "mutated"
 	if err := client.Load(t.Context()); err != nil {
 		t.Fatal(err)
