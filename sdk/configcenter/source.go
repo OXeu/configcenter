@@ -3,7 +3,6 @@ package configcenter
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 )
 
@@ -37,34 +36,6 @@ func (s MapSource) Read(ctx context.Context, prefix string) ([]Item, error) {
 	for key, value := range s {
 		if strings.HasPrefix(key, prefix) {
 			items = append(items, Item{Key: key, Value: value})
-		}
-	}
-	return items, nil
-}
-
-type remoteSource struct {
-	client *Client
-}
-
-func (s remoteSource) Read(ctx context.Context, prefix string) ([]Item, error) {
-	query := url.Values{}
-	if prefix != "" {
-		query.Set("prefix", prefix)
-	}
-	var body struct {
-		Items []Item `json:"items"`
-	}
-	path := s.client.valuesPath()
-	if err := s.client.get(ctx, path, query, &body); err != nil {
-		return nil, err
-	}
-	items := make([]Item, 0, len(body.Items))
-	for _, item := range body.Items {
-		if err := validateKey(item.Key); err != nil {
-			return nil, fmt.Errorf("configcenter: invalid remote key: %w", err)
-		}
-		if strings.HasPrefix(item.Key, prefix) {
-			items = append(items, item)
 		}
 	}
 	return items, nil

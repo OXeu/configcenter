@@ -152,11 +152,14 @@ func (c *Client) putMany(ctx context.Context, values map[string]string) error {
 }
 
 func (c *Client) cachePutMany(items []Item) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	now := time.Now()
+	c.mu.Lock()
 	c.cache.prune(now)
 	for _, item := range items {
 		c.cache.put(item, now)
 	}
+	c.cache.dropRevisions()
+	snapshot := c.fileSnapshotLocked(c.prefix, now)
+	c.mu.Unlock()
+	c.persistSnapshot(snapshot)
 }

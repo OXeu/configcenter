@@ -48,8 +48,9 @@ func expireCache(client *Client) {
 		entry.expiresAt = time.Now().Add(-time.Second)
 		client.cache.entries[key] = entry
 	}
-	for prefix := range client.cache.prefixes {
-		client.cache.prefixes[prefix] = time.Now().Add(-time.Second)
+	for prefix, scope := range client.cache.scopes {
+		scope.expiresAt = time.Now().Add(-time.Second)
+		client.cache.scopes[prefix] = scope
 	}
 }
 
@@ -218,7 +219,7 @@ func TestPrefixCacheCoverage(t *testing.T) {
 	}
 	client.mu.Lock()
 	deadline := client.cache.entries["db.pool"].expiresAt
-	if client.cache.prefixes[""].After(deadline) {
+	if client.cache.scopes[""].expiresAt.After(deadline) {
 		t.Error("broader fetch extended earlier cache TTL")
 	}
 	client.mu.Unlock()

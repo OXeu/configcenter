@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -29,11 +30,13 @@ var (
 	ErrKeyNotFound = errors.New("configcenter: key not found")
 )
 
-// Config selects the memory cache, remote, dotenv and default configuration sources.
+// Config selects the memory cache, file cache, remote, dotenv and default sources.
 type Config struct {
 	// CacheTTL bounds the lifetime of cached reads and writes without extending on hits.
 	// Zero uses DefaultCacheTTL; negative durations are invalid.
 	CacheTTL time.Duration
+	// CacheFile persists the last remote snapshot for warm starts; empty disables it.
+	CacheFile string
 	// DotenvFiles lists dotenv files in priority order. Nil reads an optional .env;
 	// an empty slice disables dotenv. Explicit files must exist.
 	DotenvFiles []string
@@ -69,6 +72,9 @@ type Item struct {
 // WatchOptions controls the polling loop.
 type WatchOptions struct {
 	Interval time.Duration
+	// OnChange receives the published snapshot only after a load changed it.
+	// It runs without internal locks, so it may read the client.
+	OnChange func([]Item)
 	// OnError reports initial and subsequent source failures. It overrides
 	// Config.OnError for this watcher; nil uses that handler or logs a warning.
 	OnError func(error)
@@ -79,6 +85,7 @@ type Client struct {
 	sources       Sources
 	endpoint      string
 	apiKey        string
+	cacheFile     string
 	revealSecrets bool
 	env           string
 	http          *http.Client
@@ -89,6 +96,7 @@ type Client struct {
 	cache     memoryCache
 	fallbacks Snapshot
 	prefix    string
+	persisted string
 }
 
 // New validates cfg and returns a client.
@@ -131,21 +139,19 @@ func newClient(cfg Config, env, endpoint string, client *http.Client) *Client {
 	c := &Client{
 		endpoint:      endpoint,
 		apiKey:        cfg.APIKey,
+		cacheFile:     cfg.CacheFile,
 		revealSecrets: cfg.RevealSecrets,
 		env:           env,
 		http:          client,
 		onError:       cfg.OnError,
-		cache: memoryCache{
-			entries:  make(map[string]cacheEntry),
-			prefixes: make(map[string]time.Time),
-			ttl:      cfg.CacheTTL,
-		},
+		cache:         newMemoryCache(cfg.CacheTTL),
 	}
 	var files []string
 	if cfg.DotenvFiles != nil {
 		files = append([]string{}, cfg.DotenvFiles...)
 	}
 	c.sources = Sources{DotenvSource{Files: files}, MapSource(maps.Clone(cfg.Defaults))}
+	c.warmStart()
 	return c
 }
 
@@ -178,9 +184,7 @@ func (c *Client) LoadPrefix(ctx context.Context, prefix string) error {
 }
 
 func (c *Client) load(ctx context.Context, prefix string, onError func(error)) error {
-	c.opMu.Lock()
-	remoteErr, localErr := c.loadSnapshot(ctx, prefix, false)
-	c.opMu.Unlock()
+	_, remoteErr, localErr := c.reload(ctx, prefix, false)
 	if localErr != nil {
 		return errors.Join(remoteErr, localErr)
 	}
@@ -190,32 +194,162 @@ func (c *Client) load(ctx context.Context, prefix string, onError func(error)) e
 	return nil
 }
 
-func (c *Client) loadSnapshot(ctx context.Context, prefix string, refresh bool) (remoteErr, localErr error) {
+// reload refreshes the snapshot and reports whether the published values
+// changed. A fetched payload identical to the cache renews the TTL instead of
+// replacing it, so unchanged polls never publish or notify.
+func (c *Client) reload(ctx context.Context, prefix string, refresh bool) (bool, error, error) {
+	c.opMu.Lock()
+	defer c.opMu.Unlock()
+	return c.reloadLocked(ctx, prefix, refresh)
+}
+
+// reloadLocked is reload without taking the operation lock; callers that
+// already hold it keep writes and reads ordered.
+func (c *Client) reloadLocked(ctx context.Context, prefix string, refresh bool) (bool, error, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("configcenter: load cancelled: %w", err)
+		return false, nil, fmt.Errorf("configcenter: load cancelled: %w", err)
 	}
+	now := time.Now()
 	c.mu.Lock()
-	c.cache.prune(time.Now())
-	covered := c.cache.covers(prefix)
+	c.cache.prune(now)
+	covered := c.cache.covers(prefix, now)
+	revision, revalidate := c.cache.revision(prefix)
+	before := revisionOf(c.configurationLocked(prefix))
 	c.mu.Unlock()
-	var remote Snapshot
+
 	fetch := !c.IsLocal() && (refresh || !covered)
+	var remoteErr error
+	var items []Item
+	notModified := false
 	if fetch {
-		remote, remoteErr = LoadSnapshot(ctx, prefix, remoteSource{client: c})
+		validator := ""
+		if revalidate {
+			validator = revision
+		}
+		items, revision, notModified, remoteErr = c.fetchRemote(ctx, prefix, validator)
 	}
 	fetchedAt := time.Now()
 	fallbacks, fallbackErr := LoadSnapshot(ctx, prefix, c.sources...)
 	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("configcenter: load cancelled: %w", err)
+		return false, nil, fmt.Errorf("configcenter: load cancelled: %w", err)
 	}
+
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	persist := fetch && remoteErr == nil && !notModified
 	if fetch && remoteErr == nil {
-		c.cache.store(prefix, remote.All(), fetchedAt, refresh)
+		if notModified {
+			c.cache.renew(prefix, fetchedAt)
+		} else {
+			c.cache.store(prefix, items, fetchedAt, refresh, revision)
+		}
 	}
 	c.fallbacks = fallbacks
 	c.prefix = prefix
-	return remoteErr, fallbackErr
+	changed := before != revisionOf(c.configurationLocked(prefix))
+	var snapshot fileSnapshot
+	if persist {
+		snapshot = c.fileSnapshotLocked(prefix, fetchedAt)
+	}
+	c.mu.Unlock()
+
+	if persist {
+		c.persistSnapshot(snapshot)
+	}
+	return changed, remoteErr, fallbackErr
+}
+
+// configurationLocked merges commit metadata with the retained payload. It
+// ignores TTL so expiry itself never counts as a configuration change.
+func (c *Client) configurationLocked(prefix string) []Item {
+	values := make(map[string]Item, len(c.fallbacks.items))
+	maps.Copy(values, c.fallbacks.items)
+	for _, item := range c.cache.all(prefix) {
+		values[item.Key] = item
+	}
+	out := make([]Item, 0, len(values))
+	for _, item := range values {
+		out = append(out, item)
+	}
+	return out
+}
+
+// effectiveLocked is what reads currently observe.
+func (c *Client) effectiveLocked(prefix string, now time.Time) []Item {
+	values := make(map[string]Item, len(c.fallbacks.items))
+	maps.Copy(values, c.fallbacks.items)
+	for _, item := range c.cache.items(prefix, now) {
+		values[item.Key] = item
+	}
+	out := make([]Item, 0, len(values))
+	for _, item := range values {
+		out = append(out, item)
+	}
+	return out
+}
+
+func (c *Client) publishedLocked(now time.Time) []Item {
+	return c.effectiveLocked(c.prefix, now)
+}
+
+func (c *Client) fetchRemote(ctx context.Context, prefix, validator string) (items []Item, revision string, notModified bool, err error) {
+	query := url.Values{}
+	if prefix != "" {
+		query.Set("prefix", prefix)
+	}
+	var body struct {
+		Items []Item `json:"items"`
+	}
+	notModified, serverRevision, err := c.conditionalGet(ctx, c.valuesPath(), query, validator, &body)
+	if err != nil || notModified {
+		return nil, validator, notModified, err
+	}
+	items = make([]Item, 0, len(body.Items))
+	for _, item := range body.Items {
+		if err := validateKey(item.Key); err != nil {
+			return nil, "", false, fmt.Errorf("configcenter: invalid remote key: %w", err)
+		}
+		if strings.HasPrefix(item.Key, prefix) {
+			items = append(items, item)
+		}
+	}
+	if serverRevision == "" {
+		serverRevision = revisionOf(items, prefix)
+	}
+	return items, serverRevision, false, nil
+}
+
+// conditionalGet performs a GET that reports an unchanged revision instead of
+// failing. It returns the response validator when the server sent one.
+func (c *Client) conditionalGet(ctx context.Context, path string, query url.Values, validator string, out any) (notModified bool, revision string, err error) {
+	req, err := c.request(ctx, http.MethodGet, c.endpoint+path, http.NoBody, query)
+	if err != nil {
+		return false, "", err
+	}
+	req.Header.Set("Accept", "application/json")
+	if validator != "" {
+		req.Header.Set("If-None-Match", validator)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return false, "", fmt.Errorf("configcenter: request %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // a close error cannot be reported after the body was read
+	switch resp.StatusCode {
+	case http.StatusNotModified:
+		if validator == "" {
+			return false, "", fmt.Errorf("configcenter: %s: unexpected 304", path)
+		}
+		return true, validator, nil
+	case http.StatusNotFound:
+		return false, "", fmt.Errorf("configcenter: %s: %w", path, ErrNotFound)
+	case http.StatusOK:
+		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+			return false, "", fmt.Errorf("configcenter: decode %s: %w", path, err)
+		}
+		return false, resp.Header.Get("ETag"), nil
+	default:
+		return false, "", fmt.Errorf("configcenter: %s: status %d", path, resp.StatusCode)
+	}
 }
 
 func reportSourceError(ctx context.Context, err error, onError func(error)) {
@@ -226,16 +360,23 @@ func reportSourceError(ctx context.Context, err error, onError func(error)) {
 	slog.WarnContext(ctx, "configcenter configuration source unavailable", "error", err)
 }
 
-func (c *Client) get(ctx context.Context, path string, query url.Values, out any) error {
-	target := c.endpoint + path
+func (c *Client) request(ctx context.Context, method, target string, body io.Reader, query url.Values) (*http.Request, error) {
 	if encoded := query.Encode(); encoded != "" {
 		target += "?" + encoded
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {
-		return fmt.Errorf("configcenter: build request: %w", err)
+		return nil, fmt.Errorf("configcenter: build request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	return req, nil
+}
+
+func (c *Client) get(ctx context.Context, path string, query url.Values, out any) error {
+	req, err := c.request(ctx, http.MethodGet, c.endpoint+path, http.NoBody, query)
+	if err != nil {
+		return err
+	}
 	req.Header.Set("Accept", "application/json")
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -298,25 +439,17 @@ func (c *Client) Bool(key string, fallback bool) bool {
 func (c *Client) All() []Item {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	values := make(map[string]Item, len(c.fallbacks.items))
-	maps.Copy(values, c.fallbacks.items)
-	now := time.Now()
-	for key := range c.cache.entries {
-		if item, ok := c.cache.get(key, now); ok && strings.HasPrefix(key, c.prefix) {
-			values[key] = item
-		}
-	}
-	out := make([]Item, 0, len(values))
-	for _, item := range values {
-		out = append(out, item)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
-	return out
+	items := c.publishedLocked(time.Now())
+	sort.Slice(items, func(i, j int) bool { return items[i].Key < items[j].Key })
+	return items
 }
 
-// Watch reloads on interval until ctx is cancelled. The first load happens
-// before Watch returns control. Remote failures report an error and use local
-// fallbacks without preventing startup or subsequent polling.
+// Watch reloads until ctx is cancelled. The first load happens before Watch
+// returns control. Remote failures report an error and use local fallbacks
+// without preventing startup or subsequent polling. Polling respects
+// CacheTTL and revalidates with If-None-Match, so an unchanged environment
+// costs one empty response per expiry. OnChange runs only after a load
+// changed the published values.
 func (c *Client) Watch(ctx context.Context, opts WatchOptions) error {
 	if opts.Interval <= 0 {
 		opts.Interval = 30 * time.Second
@@ -325,8 +458,15 @@ func (c *Client) Watch(ctx context.Context, opts WatchOptions) error {
 	if onError == nil {
 		onError = c.onError
 	}
-	if err := c.load(ctx, "", onError); err != nil {
-		return err
+	changed, remoteErr, localErr := c.reload(ctx, "", false)
+	if localErr != nil {
+		return errors.Join(remoteErr, localErr)
+	}
+	if remoteErr != nil {
+		reportSourceError(ctx, remoteErr, onError)
+	}
+	if changed && opts.OnChange != nil {
+		opts.OnChange(c.All())
 	}
 	go func() {
 		ticker := time.NewTicker(opts.Interval)
@@ -336,14 +476,81 @@ func (c *Client) Watch(ctx context.Context, opts WatchOptions) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if err := c.load(ctx, "", onError); err != nil {
-					if ctx.Err() != nil {
-						return
-					}
+				changed, remoteErr, localErr := c.reload(ctx, "", false)
+				if ctx.Err() != nil {
+					return
+				}
+				if err := errors.Join(remoteErr, localErr); err != nil {
 					reportSourceError(ctx, err, onError)
+				}
+				if changed && opts.OnChange != nil {
+					opts.OnChange(c.All())
 				}
 			}
 		}
 	}()
 	return nil
+}
+
+// warmStart restores the persisted snapshot, allowing reads before the first
+// request. Expired entries stay invisible until a conditional request
+// confirms the server still serves the same revision.
+func (c *Client) warmStart() {
+	if c.cacheFile == "" {
+		return
+	}
+	persisted, err := readFileSnapshot(c.cacheFile)
+	if err != nil {
+		slog.Warn("configcenter local cache unavailable", "path", c.cacheFile, "error", err)
+		return
+	}
+	if persisted.Environment != c.env {
+		return
+	}
+	items := make([]Item, 0, len(persisted.Items))
+	for _, item := range persisted.Items {
+		if validateKey(item.Key) == nil && strings.HasPrefix(item.Key, persisted.Prefix) {
+			items = append(items, item)
+		}
+	}
+	c.cache.restore(persisted.Prefix, cacheScope{expiresAt: persisted.FetchedAt.Add(c.cache.ttl), revision: persisted.Revision}, items)
+}
+
+func (c *Client) fileSnapshotLocked(prefix string, now time.Time) fileSnapshot {
+	snapshot := fileSnapshot{
+		Version:     fileCacheVersion,
+		Environment: c.env,
+		Prefix:      prefix,
+		FetchedAt:   now.UTC(),
+		Items:       sortedItems(c.cache.items(prefix, now)),
+	}
+	if scope, ok := c.cache.scope(prefix); ok {
+		snapshot.Revision = scope.revision
+	}
+	return snapshot
+}
+
+func (c *Client) persistSnapshot(snapshot fileSnapshot) {
+	if c.cacheFile == "" || snapshot.Version == 0 {
+		return
+	}
+	encoded, err := encodeFileSnapshot(snapshot)
+	if err != nil {
+		slog.Warn("configcenter local cache not written", "path", c.cacheFile, "error", err)
+		return
+	}
+	digest := digestOf(encoded)
+	c.mu.RLock()
+	unchanged := digest == c.persisted
+	c.mu.RUnlock()
+	if unchanged {
+		return
+	}
+	if err := writeFileSnapshot(c.cacheFile, encoded); err != nil {
+		slog.Warn("configcenter local cache not written", "path", c.cacheFile, "error", err)
+		return
+	}
+	c.mu.Lock()
+	c.persisted = digest
+	c.mu.Unlock()
 }

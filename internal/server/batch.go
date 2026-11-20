@@ -63,7 +63,7 @@ func (s *Server) readItems(c *gin.Context, project store.Project, env store.Envi
 			missing = append(missing, key)
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"project": project.Slug, "environment": env.Slug, "items": out, "missing_keys": missing})
+	s.writeRevision(c, gin.H{"project": project.Slug, "environment": env.Slug, "items": out, "missing_keys": missing})
 }
 
 func (s *Server) apiPutItems(c *gin.Context, project store.Project) {

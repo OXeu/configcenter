@@ -46,6 +46,7 @@ func (c *Client) ensureDefaults(ctx context.Context, defaults map[string]string)
 				c.cache.put(Item{Key: key, Value: value, UpdatedAt: now.UTC()}, now)
 			}
 		}
+		c.cache.dropRevisions()
 		c.mu.Unlock()
 	} else {
 		existing, err := c.readMany(ctx, batchKeys(defaults))
@@ -64,6 +65,6 @@ func (c *Client) ensureDefaults(ctx context.Context, defaults map[string]string)
 			}
 		}
 	}
-	remoteErr, localErr := c.loadSnapshot(ctx, "", !c.IsLocal())
+	_, remoteErr, localErr := c.reloadLocked(ctx, "", true)
 	return errors.Join(remoteErr, localErr)
 }

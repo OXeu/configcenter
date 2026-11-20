@@ -21,6 +21,8 @@
 
 MCP 的 `list_config` 和 `list_values` 接受 `keys` 字符串数组，`set_configs` 接受上述 `items` 数组。SDK 提供 `ReadMany` 和 `PutMany`；`EnsureDefaults` 先批量读，再批量写入缺失项，不使用独立初始化 API。远端首次初始化应由一个实例完成，读写之间不提供跨请求并发保护。
 
+普通配置读取（批量与列表接口）返回基于响应正文的 `ETag` 和 `Cache-Control: no-cache`。请求带上匹配的 `If-None-Match` 时返回 `304 Not Modified` 且没有响应正文，客户端可以只延长缓存有效期；值、掩码或元数据任一变化都会改变校验值。特权明文读取不适用：它始终返回 `Cache-Control: no-store` 和完整正文。
+
 ## 密钥字段与读取权限
 
 创建或编辑配置时可设置 `secret: true`。未传 `secret` 的单项和批量写入保留已有标记；新增字段默认不是密钥。取消标记需要 `config:read-secrets`，MCP 不允许取消。单项更新已有密钥时可省略 `value` 以保留原值并修改键名或描述；不要把掩码作为新值提交。批量写入仍要求每项提供 `value`。

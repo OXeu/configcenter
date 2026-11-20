@@ -297,7 +297,7 @@ func (s *Server) itemsResponse(c *gin.Context, project store.Project, env store.
 	for _, item := range items {
 		out = append(out, toItemJSON(c, item))
 	}
-	c.JSON(http.StatusOK, gin.H{"project": project.Slug, "environment": env.Slug, "items": out})
+	s.writeRevision(c, gin.H{"project": project.Slug, "environment": env.Slug, "items": out})
 }
 
 func (s *Server) apiListItems(c *gin.Context, project store.Project) {

@@ -89,13 +89,30 @@ pool := client.Int("db.pool", 10)
 
 ### 内存缓存与 TTL
 
-`CacheTTL` 为零时使用 `DefaultCacheTTL`（30 秒），也可指定正的 `time.Duration`，负值会在 `New` 时返回错误。TTL 从成功读取或写入开始计算，命中缓存不会续期。每个客户端持有独立的 map，缓存不落盘，不跨客户端或进程重启共享，也不需要 Close。
+`CacheTTL` 为零时使用 `DefaultCacheTTL`（30 秒），也可指定正的 `time.Duration`，负值会在 `New` 时返回错误。TTL 从成功读取或写入开始计算，命中缓存不会续期。每个客户端持有独立的 map，默认不跨客户端或进程重启共享，也不需要 Close；需要跨重启复用时可设置 `CacheFile`。
 
 `Load` / `LoadPrefix` 先检查请求范围是否有完整且有效的缓存；命中时跳过 ConfigCenter。缓存缺失或过期时请求远端，用返回值补齐缓存；已有的未过期值仍优先。完整快照可以覆盖更窄的前缀，前缀快照不能代替完整加载。成功返回的空快照也按 TTL 缓存，避免反复请求缺失的配置。更大范围的加载不会延长已有条目的 TTL。
 
 远程读取和 `Put` 成功后缓存空字符串及配置元数据；失败的写入不改动缓存。过期后远端已删除的键、远端不可用时的旧值均不会继续返回，而是使用 dotenv 或默认值。加载和写入会清理过期条目；`Get`、`GetDefault`、`Int`、`Bool` 和 `All` 也会检查有效期。
 
 dotenv 和 `Defaults` 仅作为读取 fallback，不会写入远程缓存。读取方法不发网络请求：缓存过期时使用最近一次加载的 fallback，需要调用 `Load` 或启用 `Watch` 获取最新远程值。原有 `LocalPath`、`LocalDefaults` 和 `DefaultLocalPath` 已移除；应用默认值改用 `Defaults`，持久化配置写入 ConfigCenter。
+
+### 本地文件缓存
+
+`CacheFile` 指定一个本地快照文件，默认关闭。`New` 会同步读取该文件，使进程在首次网络请求完成前就能返回上次成功加载的远程配置；文件按环境区分，环境或版本不匹配时忽略。文件只在成功加载后由 SDK 原子替换，SDK 不会删除它。
+
+快照同时记录服务端返回的校验值和加载时间。文件仍在 `CacheTTL` 内时，`Load` 不发请求；超过 TTL 后条目对读取方法不可见，但 SDK 仍保留校验值，下一次 `Load` 或轮询使用条件请求确认，未变化则不发正文并恢复这些值。这样重启不会造成批量全量下载。
+
+```go
+client, err := configcenter.New(configcenter.Config{
+    BaseURL:   baseURL,
+    APIKey:    apiKey,
+    CacheFile: ".tmp/configcenter-cache.json",
+    CacheTTL:  30 * time.Second,
+})
+```
+
+此片段放在持有 `baseURL` 和 `apiKey` 的调用方函数中。相对路径按进程工作目录解析，父目录会自动创建；无法读取或内容损坏时会忽略文件并通过 `slog` 告警，不会阻止启动。文件包含掩码或明文配置值，应与 `.env` 同等保护：放在仓库 `.tmp/` 或应用专用的受限目录，不要提交到版本库，也不要跨环境共享。
 
 ### dotenv 文件
 
@@ -193,7 +210,22 @@ if err := client.Watch(watchCtx, configcenter.WatchOptions{
 
 此片段放在持有 `client`、`ctx` 和 `logger` 的长生命周期函数中，并在该函数结束前运行应用。Watch 同步加载首次完整快照；远程失败时使用回退、报告错误并继续启动后台轮询，本地错误或 context 取消则返回错误。Interval 小于等于零时使用 30 秒。首次及后续远程错误优先交给 `WatchOptions.OnError`，否则使用 `Config.OnError`，两者均未设置时输出告警。远端失败不会缓存为空结果，恢复后下一次轮询可立即重新读取。
 
-取消 context 可停止轮询。一个客户端通常只启动一次 Watch。Watch 每次加载全部配置，因此会覆盖 LoadPrefix 得到的过滤快照；它不提供前缀订阅、变更回调或服务端推送。轮询遵守 `CacheTTL`：缓存有效时跳过远端，过期后的下一次轮询才请求远端；在此间隙读取方法使用已加载的 fallback。
+取消 context 可停止轮询。一个客户端通常只启动一次 Watch。Watch 每次加载全部配置，因此会覆盖 LoadPrefix 得到的过滤快照；它不提供前缀订阅或服务端推送。
+
+轮询遵守 `CacheTTL`：缓存有效时跳过远端，过期后的下一次轮询才用条件请求确认校验值。服务端对普通读取返回基于响应正文的 `ETag`，未变化时回复 `304 Not Modified`，不会重复传输配置正文；客户端收到 `304` 只延长 TTL，不替换快照。`OnChange` 只在配置内容真正变化时调用，键序、时间戳和 TTL 变化都不会触发。
+
+```go
+if err := client.Watch(watchCtx, configcenter.WatchOptions{
+    Interval: 30 * time.Second,
+    OnChange: func(items []configcenter.Item) {
+        logger.Info("configuration changed", "keys", len(items))
+    },
+}); err != nil {
+    return fmt.Errorf("start configuration watcher: %w", err)
+}
+```
+
+调用方可以据此重建连接池、刷新证书或重新加载业务规则，不必在每次轮询后与自身保存的副本比较内容。服务端未返回 `ETag` 时，SDK 用收到的正文计算同样的校验值，仍能避免重复发布。本地写入会清除校验值，使下一次读取重新获取完整正文。
 
 ## 错误处理
 
