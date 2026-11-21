@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AuthCard from '@oxeu/center-common/ui/AuthCard.vue'
 import Button from '@oxeu/center-common/ui/Button.vue'
 import { computed, defineAsyncComponent, onMounted, watch } from 'vue'
 import PageHeader from './PageHeader.vue'
@@ -29,6 +30,9 @@ const { msg } = page
 const title = computed(
   () => data.project?.name ?? msg(data.page === 'login' ? 'login.title' : data.title),
 )
+const oauthHref = computed(() => (data.oauthEnabled ? '/auth/login' : ''))
+const oauthLabel = computed(() => msg('login.continue', { ProviderName: data.providerName }))
+const loginSubtitle = computed(() => msg('login.subtitle', { ProviderName: data.providerName }))
 onMounted(() => {
   mountToasts(data.lang, data.nonce, theme.value)
   if (data.flash) notify(data.flash.level, data.flash.message)
@@ -50,13 +54,13 @@ onMounted(() => {
       subtitle=""
       @toggle-theme="toggleTheme"
     >
-      <Button
-        class="mt-4"
-        v-if="data.page === 'login' && data.oauthEnabled"
-        href="/auth/login"
-        variant="primary"
-        >{{ msg('login.continue', { ProviderName: data.providerName }) }}</Button
-      >
+      <AuthCard
+        v-if="data.page === 'login'"
+        :title="msg('login.title')"
+        :subtitle="loginSubtitle"
+        :oauth-href="oauthHref"
+        :oauth-label="oauthLabel"
+      />
       <WorkspacePage v-if="isWorkspace" :data="data" :page="page" :title="title" />
       <OAuthConsentPage v-if="data.page === 'oauth-consent'" :data="data" :page="page" />
     </PageHeader>

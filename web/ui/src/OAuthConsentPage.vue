@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import Button from '@oxeu/center-common/ui/Button.vue'
+import ConsentCard from '@oxeu/center-common/ui/ConsentCard.vue'
 import { navigateDocument } from '@oxeu/center-common/ui/navigation.ts'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { api } from './core.ts'
 import type { PageData } from './data.ts'
 import type { PageContext } from './page.ts'
@@ -9,6 +9,18 @@ import type { PageContext } from './page.ts'
 const props = defineProps<{ data: PageData; page: PageContext }>()
 const { msg } = props.page
 const busy = ref(false)
+const clientTitle = computed(() =>
+  props.data.consent ? msg('oauth.client', { ClientName: props.data.consent.clientName }) : '',
+)
+const details = computed(() => {
+  const consent = props.data.consent
+  if (!consent) return []
+  return [
+    { label: msg('oauth.account'), value: props.data.me?.email ?? '' },
+    { label: msg('oauth.resource'), value: consent.resource },
+    { label: msg('oauth.redirect'), value: consent.redirectUri },
+  ]
+})
 
 async function decide(approve: boolean) {
   if (busy.value || !props.data.consent) return
@@ -28,32 +40,15 @@ async function decide(approve: boolean) {
 </script>
 
 <template>
-  <section v-if="data.consent" class="card mt-4 max-w-2xl space-y-4">
-    <h2 class="text-base font-semibold">
-      {{ msg('oauth.client', { ClientName: data.consent.clientName }) }}
-    </h2>
-    <p>{{ msg('oauth.permissions') }}</p>
-    <dl class="space-y-3 text-sm">
-      <div>
-        <dt class="font-medium">{{ msg('oauth.account') }}</dt>
-        <dd>{{ data.me?.email }}</dd>
-      </div>
-      <div>
-        <dt class="font-medium">{{ msg('oauth.resource') }}</dt>
-        <dd class="break-all">{{ data.consent.resource }}</dd>
-      </div>
-      <div>
-        <dt class="font-medium">{{ msg('oauth.redirect') }}</dt>
-        <dd class="break-all">{{ data.consent.redirectUri }}</dd>
-      </div>
-    </dl>
-    <div class="flex flex-wrap gap-2">
-      <Button type="button" :disabled="busy" @click="decide(true)" variant="primary">
-        {{ msg('oauth.allow') }}
-      </Button>
-      <Button type="button" :disabled="busy" @click="decide(false)" variant="secondary">
-        {{ msg('oauth.deny') }}
-      </Button>
-    </div>
-  </section>
+  <ConsentCard
+    v-if="data.consent"
+    :title="clientTitle"
+    :description="msg('oauth.permissions')"
+    :details="details"
+    :allow-label="msg('oauth.allow')"
+    :deny-label="msg('oauth.deny')"
+    :busy="busy"
+    @allow="decide(true)"
+    @deny="decide(false)"
+  />
 </template>
